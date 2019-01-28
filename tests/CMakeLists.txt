@@ -5,7 +5,7 @@
 
 add_custom_target(tests
     COMMAND 
-        python ${CMAKE_CURRENT_SOURCE_DIR}/example.py ${QuEST_LIB_PATH}
+        ${CMAKE_CURRENT_SOURCE_DIR}/QuESTTest.py -Q ${QuEST_LIB_PATH} -p ${CMAKE_CURRENT_SOURCE_DIR}/unitPy
     DEPENDS 
         QuEST
 )
