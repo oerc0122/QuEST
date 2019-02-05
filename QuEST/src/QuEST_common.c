@@ -332,6 +332,7 @@ qreal statevec_calcFidelity(Qureg qureg, Qureg pureState) {
 
 
 
+
 #ifdef __cplusplus
 }
 #endif
