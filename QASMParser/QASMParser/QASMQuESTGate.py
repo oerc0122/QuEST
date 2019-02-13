@@ -21,7 +21,7 @@ class QuESTLibGate(Gate):
         
     def reorder_args(self, qargs, cargs):
         argString = ""
-        preString = ""
+        preString = []
         args = []
         rest = []
         for expect in self.argOrder:
@@ -37,15 +37,40 @@ class QuESTLibGate(Gate):
             for qarg in qargs:
                 rest.append(qarg[1])
 
+        nTemp = 0
         for arg in self.argOrder:
             if arg == "nextQureg" or arg == "nextIndex" or arg == "Index":
                 argString += ","+args.pop(0)
             elif arg == "mConRestIndex":
+                nTemp+=1
+                tempVar = "tmp"+str(nTemp)
                 nRest     = len(rest)
-                preString = f"int[{nRest}] tmp = {{"+",".join(rest)+"};"
-                argString += f", (int*)tmp, {nRest}"
-        if cargs: argString += ",{','.join(cargs)}"
-
+                preString += [f"int[{nRest}] {tempVar} = {{"+",".join(rest)+"}"]
+                argString += f", (int*){tempVar}, {nRest}"
+            elif arg == "nextCarg":
+                argString += f"{cargs.pop(0)}"
+            elif arg == "cargs":
+                argString += f",{','.join(cargs)}"
+                cargs = []
+            elif arg == "complexCarg":
+                nTemp += 1
+                tempVar = "tmp"+str(nTemp)
+                tempArg = [cargs.pop(0), cargs.pop(0)]
+                preString += [f"Complex {tempVar}",
+                              f"{tempVar}.real = {tempArg[0]}",
+                              f"{tempVar}.imag = {tempArg[1]}"]
+                argString += f",{tempVar}"
+            elif arg == "complexMatrix2Carg":
+                nTemp += 1
+                tempVar = "tmp"+str(nTemp)
+                tempArg = [cargs.pop(0), cargs.pop(0), cargs.pop(0), cargs.pop(0)]
+                preString += [f"ComplexMatrix2 {tempVar}",
+                              f"{tempVar}.r0c0 = {tempArg[0]}",
+                              f"{tempVar}.r0c1 = {tempArg[1]}",
+                              f"{tempVar}.r1c0 = {tempArg[1]}",
+                              f"{tempVar}.r1c1 = {tempArg[1]}"]
+                argString += f",{tempVar}"
+                
         return preString, argString.strip(',')
                 
     def to_c(self):
@@ -54,4 +79,8 @@ class QuESTLibGate(Gate):
 
 QuESTLibGate(name = "x",   cargs = None, qargs = "a", argOrder = ("nextQureg", "Index"), internalName = "pauliX")
 QuESTLibGate(name = "cx",  cargs = None, qargs = "a", argOrder = ("nextQureg", "Index", "nextIndex"), internalName = "controlledNot")
-QuESTLibGate(name = "ccx", cargs = None, qargs = "a,b", argOrder = ("nextQureg", "mConRestIndex", "Index"), internalName = "multiControlledNot")
+QuESTLibGate(name = "ccx", cargs = None, qargs = "a,b", argOrder = ("nextQureg", "mConRestIndex", "Index", "cargs"), internalName = "multiControlledNot")
+QuESTLibGate(name = "rotateX", cargs = "phi", qargs = "a", argOrder = ("nextQureg", "Index", "cargs"), internalName = "rotateX")
+QuESTLibGate(name = "rotateY", cargs = "theta", qargs = "a", argOrder = ("nextQureg", "Index", "cargs"), internalName = "rotateY")
+QuESTLibGate(name = "rotateZ", cargs = "lambda", qargs = "a", argOrder = ("nextQureg", "Index", "cargs"), internalName = "rotateZ")
+Gate(name = "U",   cargs = "theta,phi,lambda", qargs = "a", block = QASMBlock('Internal', 0, 'rotateZ(lambda) a;rotateY(theta) a;rotateX(phi) a;'))
