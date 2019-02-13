@@ -157,7 +157,6 @@ class CallGate:
                 self._loops.append((qarg[1], qarg[0].size))
         if cargs: self._cargs = cargs.split(',')
         else: self._cargs = []
-
     def to_c(self):
 
         if self.gate in Gate.internalGates:
@@ -169,27 +168,28 @@ class CallGate:
             for carg in self._cargs:
                 printArgs += ", "+carg
             printGate = self.gate
-            preString = ""
+            preString = []
 
+        outString = ""
+        indent = "  "
+        depth = 0
         if self._loops:
-            indent = "  "
             Cfor = "for (int {var} = {min}; {var} < {max}; {var} += {step}) {{\n"
-            outString = ""
-            depth = 0
             for loop in self._loops:
                 outString += indent*depth + Cfor.format(var = loop[0], min = 0, max = loop[1], step = 1)
                 depth += 1
-            if preString: outString += f"{indent*depth+preString} {indent*depth+printGate}({printArgs}); \n"
-            else:         outString += f"{indent*depth+printGate}({printArgs}); \n"
+            for line in preString:
+                outString += indent*depth + line + ";\n"
+            outString += f"{indent*depth+printGate}({printArgs}); \n"
             for loop in self._loops:
                 depth -= 1
                 outString += indent*depth + "}\n"
             return outString
         else:
-            if preString:
-                return f"{preString} {printGate}({printArgs});"
-            else:
-                return f"{printGate}({printArgs});"
+            for line in preString:
+                outString += indent*depth + line + ";\n"
+            outString += f"{indent*depth+printGate}({printArgs});"
+            return outString
 
     def to_python(self):
         if self._loops:
@@ -223,7 +223,6 @@ class Prog:
         self.currentFile = QASMFile(filename)
         self.instructions = self.currentFile.read_instruction()
         self.parse_instructions()
-
     def to_c(self, filename):
         with open(filename, 'w') as outputFile:
             for line in self._code:
@@ -291,7 +290,7 @@ class Prog:
     def parse_line(self, line, token):
         match = token(line)
         if token.name == "include":
-            self += Prog(match.group('filename'))
+            self.__add__(Prog(match.group('filename')))
         elif token.name == "wholeLineComment":
             self.comment(match.group('comment'))
         elif token.name == "createReg":
@@ -360,7 +359,7 @@ class Prog:
             if close(line): break
             block += line + ";"
         else:
-            self.currentFile._error(eofWarning.format('parsing block {blockName}'))
+            self.currentFile._error(eofWarning.format(f'parsing block {blockName}'))
         return QASMBlock(self.currentFile.name, startline, block)
 
 class CBlock(Prog):

@@ -53,3 +53,5 @@ measure b[2] -> ans[2];
 measure b[3] -> ans[3];
 measure cout[0] -> ans[4];
 if (ans[0] == 1) { CBLOCK @ printf("%i", 128); @ };
+
+U(0,0,lambda) a;
