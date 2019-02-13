@@ -16,7 +16,7 @@ typeWarning = 'Unrecognised type {} requested in function {}'
 class QASMFile:
 
     _QASMFiles = []
-    
+
     def __init__(self,filename, reqVersion=("2","0")):
         if filename in QASMFile._QASMFiles: raise IOError('Circular dependency in includes')
         if os.path.isfile(filename): self.File = open(filename,'r')
@@ -41,15 +41,15 @@ class QASMFile:
 
             if reqVersion[0] > self.version[0] :
                 self._error('Unsupported QASM version: {}.{}'.format(*self.version))
-        except ValueError:
-            self._error('Header of file :\n'+temp+"\n does not contain version")
+        except AttributeError:
+            self._error("Header does not contain version")
         except RuntimeError:
             self._error(eofWarning.format('trying to determine QASM version'))
-            
+
     def _error(self, message=""):
         raise IOError(fileWarning.format(message=message,
                                          file=self.name, line=self.nLine))
-        
+
     def __del__(self):
         try:
             openFiles = QASMFile._QASMFiles
@@ -59,8 +59,8 @@ class QASMFile:
             return
 
     def block_split(self, line):
-        return [inst for inst in re.findall('(\{|\}|[^{}]+)', line) if not re.match('^\s+$',inst)]
-
+        match = re.findall('(@|\{|\}|[^{}@]+)', line)
+        return [inst for inst in match if not re.match('^\s+$',inst)]
     def read_instruction(self):
         line = self.readline()
         lines = ""
@@ -70,7 +70,7 @@ class QASMFile:
             if tokens.wholeLineComment(lines):
                 yield lines
                 lines = ""
-               
+
             *tmpInstructions, lines = lines.split(';')
             if len(tmpInstructions) > 0:
                 instructions = []
@@ -81,7 +81,7 @@ class QASMFile:
                     yield currInstruction
             line = self.readline()
 
-            
+
     def readline(self):
         """ Reads a line from a file """
         for line in self.File:
@@ -109,7 +109,7 @@ class QASMBlock(QASMFile):
 
     def __del__(self):
         del self
-        
+
 class Comment:
     def __init__(self, comment : str):
         self.comment = comment
@@ -145,7 +145,7 @@ class Argument:
 
     def to_python(self):
         return self.name
-        
+
 class CallGate:
     def __init__(self, gate, cargs, qargs):
         self.gate = gate
@@ -157,26 +157,39 @@ class CallGate:
                 self._loops.append((qarg[1], qarg[0].size))
         if cargs: self._cargs = cargs.split(',')
         else: self._cargs = []
-        
+
     def to_c(self):
-        printArgs = ", ".join([f"{qarg[0].name}, {qarg[1]}" for qarg in self._qargs])
-        for carg in self._cargs:
-            printArgs += ", "+carg
+
+        if self.gate in Gate.internalGates:
+            gateRef   = Gate.internalGates[self.gate]
+            preString, printArgs = gateRef.reorder_args(self._qargs,self._cargs)
+            printGate = gateRef.internalName
+        else:
+            printArgs = ", ".join([f"{qarg[0].name}, {qarg[1]}" for qarg in self._qargs])
+            for carg in self._cargs:
+                printArgs += ", "+carg
+            printGate = self.gate
+            preString = ""
+
         if self._loops:
-            Cfor = "for (int {var} = {min}; {var} < {max}; {var} += {step}) {{\n"
             indent = "  "
+            Cfor = "for (int {var} = {min}; {var} < {max}; {var} += {step}) {{\n"
             outString = ""
             depth = 0
             for loop in self._loops:
                 outString += indent*depth + Cfor.format(var = loop[0], min = 0, max = loop[1], step = 1)
                 depth += 1
-            outString += indent*depth + f"{self.gate}({printArgs}); \n"
+            if preString: outString += f"{indent*depth+preString} {indent*depth+printGate}({printArgs}); \n"
+            else:         outString += f"{indent*depth+printGate}({printArgs}); \n"
             for loop in self._loops:
                 depth -= 1
                 outString += indent*depth + "}\n"
             return outString
         else:
-            return f"{self.gate}({printArgs});"
+            if preString:
+                return f"{preString} {printGate}({printArgs});"
+            else:
+                return f"{printGate}({printArgs});"
 
     def to_python(self):
         if self._loops:
@@ -199,7 +212,7 @@ class Measure:
 
     def to_python(self):
         return f"{self.carg}[{self.bindex}] = measure({self.qarg}, {self.qindex})"
-    
+
 class Prog:
     def __init__(self, filename):
         self._code = []
@@ -209,8 +222,8 @@ class Prog:
         self.filename = filename
         self.currentFile = QASMFile(filename)
         self.instructions = self.currentFile.read_instruction()
-        self.parse_file(filename)
-        
+        self.parse_instructions()
+
     def to_c(self, filename):
         with open(filename, 'w') as outputFile:
             for line in self._code:
@@ -240,8 +253,8 @@ class Prog:
                 else:
                     self._funcs[func]  = other._funcs[func]
         else:
-            raise TypeError(f'Cannot combine {type(self).__name__} with {type(other).__name__}')    
-                    
+            raise TypeError(f'Cannot combine {type(self).__name__} with {type(other).__name__}')
+
     def comment(self, comment):
         self._code += [Comment(comment)]
 
@@ -268,70 +281,128 @@ class Prog:
     def measurement(self, qarg, qindex, carg, bindex):
         measure = Measure(qarg, qindex, carg, bindex)
         self._code += [measure]
-        
+
+    def new_if(self, cond, block):
+        self._code += [IfBlock(cond, block)]
+
+    def cBlock(self, block):
+        self._code += [CBlock(block)]
+
     def parse_line(self, line, token):
         match = token(line)
         if token.name == "include":
             self += Prog(match.group('filename'))
-        if token.name == "wholeLineComment":
+        elif token.name == "wholeLineComment":
             self.comment(match.group('comment'))
-        if token.name == "createReg":
+        elif token.name == "createReg":
             argName = match.group('qargName')
             size = match.group('qubitIndex')
             classical = match.group('regType') == "c"
             self.new_variable(argName, size, classical)
-        if token.name == "callGate":
+        elif token.name == "callGate":
             funcName = match.group('funcName')
             cargs = match.group('cargs')
             qargs = match.group('qargs')
             self.call_gate(funcName, cargs, qargs)
-        if token.name == "createGate":
+        elif token.name == "createGate":
             funcName = match.group('funcName')
             cargs = match.group('cargs')
             qargs = match.group('qargs')
-            if not tokens.openBlock(next(self.instructions)):
-                self.currentFile._error('Gate creation not followed by open block')
             block = self.parse_block(funcName)
             self.gate(funcName, cargs, qargs, block)
-        if token.name == "measure":
+        elif token.name == "measure":
             carg = match.group('cargName')
             bindex = match.group('bitIndex')
             qarg = match.group('qargName')
             qindex = match.group('qubitIndex')
             self.measurement(qarg, qindex, carg, bindex)
-
+        elif token.name == "ifLine":
+            cond = match.group('cond')
+            if match.group('op'):
+                block = match.group('op')+";\n"
+            else:
+                block = self.parse_block("if")
+            self.new_if(cond, block)
+        elif token.name == "CBlock":
+            block = self.parse_block("CBlock")
+            self.cBlock(block)
+        else :
+            self.currentFile._error('Unimplemented instruction' + line)
+        
     def parse_qarg_string(self, qargString):
         qargs = [ tokens.namedQubit(qarg).groups() for qarg in qargString.split(',')]
         for qarg in qargs:
             if qarg[0] not in self._qargs: raise self.currentFile.error()
         qargs = [[self._qargs[arg[0]], int(arg[1])] if arg[1] is not None and arg[1].isdecimal()
                  else [self._qargs[arg[0]], arg[1]]
-                 for arg in qargs]        
+                 for arg in qargs]
         return qargs
-            
-    def parse_file(self,filename):
+
+    def parse_instructions(self):
         for line in self.instructions:
             for name, token in tokens._hlevel.items():
                 if token(line) is not None:
                     self.parse_line(line, token)
                     break
             else: self.currentFile._error('Invalid instruction: "'+line+'"')
-            
+
     def parse_block(self, blockname):
+        blockOpen = next(self.instructions)
+        if tokens.openBlock(blockOpen):
+            close = tokens.closeBlock
+        elif tokens.openCBlock(blockOpen):
+            close = tokens.closeCBlock
+        else:
+            self.currentFile._error(f'{blockname} specification not followed by open block')
         startline = self.currentFile.nLine
         block = ""
         for line in self.instructions:
-            if tokens.closeBlock(line): break
-            block += line + ";\n"
+            if close(line): break
+            block += line + ";"
         else:
             self.currentFile._error(eofWarning.format('parsing block {blockName}'))
         return QASMBlock(self.currentFile.name, startline, block)
-            
+
+class CBlock(Prog):
+    def __init__(self, block):
+        self.currentFile = block
+        self.instructions = self.currentFile.read_instruction()
+
+    def to_c(self):
+        outStr = ""
+        for instruction in self.instructions:
+            outStr += instruction+";\n"
+        return outStr
+
+class IfBlock(Prog):
+
+    def __init__(self, cond, block):
+        self._cond = cond
+        self._code = []
+        self.currentFile = block
+        self.instructions = self.currentFile.read_instruction()
+        self.parse_instructions()
+
+    def to_c(self):
+        outStr = f"if ({self._cond}) {{\n"
+        for line in self._code:
+            outStr += "  "+line.to_c()
+        outStr += "}"
+        return outStr
+
+    def to_python(self):
+        printArgs = ",".join([arg.to_python() for arg in self._qargs + self._cargs])
+        outSTr = f"if ({self._cond}):"
+        for line in self._code:
+            outStr += "    "+line.to_python()
+        return outStr
+
+
 class Gate(Prog):
 
     gates = {}
     internalGates = {}
-    
+
     def __init__(self, name, cargs, qargs, block):
         self.name = name
         self._code = []
@@ -340,31 +411,22 @@ class Gate(Prog):
         if qargs:
             for qarg in qargs.split(','):
                 self._qargs[qarg] = Argument(qarg, False)
-                
-        if cargs: 
+
+        if cargs:
             for carg in cargs.split(','):
                 self._cargs[carg] = Argument(carg, True)
 
-                
+
         self._argNames = [arg.name for arg in list(self._qargs.values()) + list(self._cargs.values())]
         self._funcs= Gate.gates
         self.currentFile = block
-        self.parse_block(self.currentFile)
+        self.instructions = block.read_instruction()
+        self.parse_instructions()
         Gate.gates[self.name] = self
 
     def new_variable(self, argument):
         if not argument.classical: raise IOError('Cannot declare new qarg in gate')
         else : raise IOError('Cannot declare new carg in gate')
-        
-    def parse_block(self, block):
-        instructions = block.read_instruction()
-        for line in instructions:
-            for name, token in tokens._hlevel.items():
-                if token(line) is not None:
-                    self.parse_line(line, token)
-                    break
-            else: currentFile._error('Invalid instruction: "'+line+'"')
-        return self
 
     def parse_qarg_string(self, qargString):
         qargs = [ tokens.namedQubit(qarg).groups() for qarg in qargString.split(',')]
@@ -380,11 +442,10 @@ class Gate(Prog):
             outStr += "  "+line.to_c() +"\n"
         outStr += "}"
         return outStr
-        
+
     def to_python(self):
         printArgs = ",".join([arg.to_python() for arg in self._qargs + self._cargs])
         outSTr = f"def {self.name}({printArgs}):"
         for line in self._code:
             outStr += "    "+line.to_python()
         return outStr
-
