@@ -59,7 +59,7 @@ class QASMFile:
             return
 
     def block_split(self, line):
-        match = re.findall('(@|\{|\}|[^{}@]+)', line)
+        match = re.findall('(\{|\}|[^{}]+)', line)
         return [inst for inst in match if not re.match('^\s+$',inst)]
     def read_instruction(self):
         line = self.readline()
@@ -174,7 +174,7 @@ class CallGate:
         indent = "  "
         depth = 0
         if self._loops:
-            Cfor = "for (int {var} = {min}; {var} < {max}; {var} += {step}) {{\n"
+            Cfor = "for (int {var} = {min}; {var} < {max}; {var} += {step})\n{{\n"
             for loop in self._loops:
                 outString += indent*depth + Cfor.format(var = loop[0], min = 0, max = loop[1], step = 1)
                 depth += 1
@@ -265,9 +265,9 @@ class Prog:
         if variable.classical: self._cargs[variable.name] = variable
         else:                  self._qargs[variable.name] = variable
 
-    def gate(self, funcName, cargs, qargs, block):
+    def gate(self, funcName, cargs, qargs, block, recursive = None):
         if funcName in self._funcs: raise self.currentFile._error(dupWarning.format('Gate', gate))
-        gate = Gate(funcName, cargs, qargs, block)
+        gate = Gate(funcName, cargs, qargs, block, recursive)
         self._funcs[gate.name] = gate
         self._code += [gate]
 
@@ -307,8 +307,9 @@ class Prog:
             funcName = match.group('funcName')
             cargs = match.group('cargs')
             qargs = match.group('qargs')
+            recursive = match.group('recurse') is not None
             block = self.parse_block(funcName)
-            self.gate(funcName, cargs, qargs, block)
+            self.gate(funcName, cargs, qargs, block, recursive)
         elif token.name == "measure":
             carg = match.group('cargName')
             bindex = match.group('bitIndex')
@@ -347,17 +348,18 @@ class Prog:
 
     def parse_block(self, blockname):
         blockOpen = next(self.instructions)
-        if tokens.openBlock(blockOpen):
-            close = tokens.closeBlock
-        elif tokens.openCBlock(blockOpen):
-            close = tokens.closeCBlock
-        else:
+        if not tokens.openBlock(blockOpen):
             self.currentFile._error(f'{blockname} specification not followed by open block')
+        depth = 1
         startline = self.currentFile.nLine
         block = ""
         for line in self.instructions:
-            if close(line): break
-            block += line + ";"
+            if tokens.openBlock(line):
+                depth += 1
+            elif tokens.closeBlock(line):
+                depth -= 1
+            if depth == 0: break
+            block += line + ";\n"
         else:
             self.currentFile._error(eofWarning.format(f'parsing block {blockName}'))
         return QASMBlock(self.currentFile.name, startline, block)
@@ -365,12 +367,23 @@ class Prog:
 class CBlock(Prog):
     def __init__(self, block):
         self.currentFile = block
-        self.instructions = self.currentFile.read_instruction()
 
     def to_c(self):
         outStr = ""
-        for instruction in self.instructions:
-            outStr += instruction+";\n"
+        indent = "  "
+        depth = 0
+        nextLine = self.currentFile.readline
+        instruction = nextLine()
+        while instruction:
+            if instruction.startswith('for'):
+                instruction += nextLine()
+                instruction += nextLine()
+                instruction = instruction.strip(';')
+            instruction = re.sub('([{}]);','\g<1>',instruction)
+            if tokens.closeBlock(instruction): depth-=1
+            outStr += indent*depth + instruction+"\n"
+            if tokens.openBlock(instruction): depth+=1
+            instruction = nextLine()
         return outStr
 
 class IfBlock(Prog):
@@ -383,7 +396,7 @@ class IfBlock(Prog):
         self.parse_instructions()
 
     def to_c(self):
-        outStr = f"if ({self._cond}) {{\n"
+        outStr = f"if ({self._cond})\n{{\n"
         for line in self._code:
             outStr += "  "+line.to_c()
         outStr += "}"
@@ -402,7 +415,7 @@ class Gate(Prog):
     gates = {}
     internalGates = {}
 
-    def __init__(self, name, cargs, qargs, block):
+    def __init__(self, name, cargs, qargs, block, recursive = False):
         self.name = name
         self._code = []
         self._cargs = {}
@@ -417,6 +430,7 @@ class Gate(Prog):
 
 
         self._argNames = [arg.name for arg in list(self._qargs.values()) + list(self._cargs.values())]
+        if recursive: Gate.gates[self.name] = "Temp"
         self._funcs= Gate.gates
         self.currentFile = block
         self.instructions = block.read_instruction()

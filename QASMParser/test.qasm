@@ -8,19 +8,23 @@ gate majority a,b,c
   cx c,a; 
   ccx a,b,c; 
 }
-gate unmaj a,b,c 
+rgate unmaj a,b,c 
 { 
   ccx a,b,c; 
   cx c,a; 
-  cx a,b; 
+  cx a,b;
+  unmaj a,a,a
 }
 
 CBLOCK
-@
+{
   printf('%s', "Hello!");
   int A = 3;
   float C = 0.6;
-@
+  for (int i = 1; i < 3; i++) {
+      printf("%s %d","hi",i)
+  }
+}
 
 qreg cin[1];
 qreg a[4];
@@ -52,6 +56,6 @@ measure b[1] -> ans[1];
 measure b[2] -> ans[2];
 measure b[3] -> ans[3];
 measure cout[0] -> ans[4];
-if (ans[0] == 1) { CBLOCK @ printf("%i", 128); @ };
+if (ans[0] == 1) { CBLOCK { printf("%i", 128); } };
 
 U(0,0,lambda) a;

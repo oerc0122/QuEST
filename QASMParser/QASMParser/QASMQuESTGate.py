@@ -28,7 +28,7 @@ class QuESTLibGate(Gate):
             if expect == "nextQureg":
                 qarg = qargs.pop(0)
                 args.append(qarg[0].name)
-            elif expect == "Index":
+            elif expect == "index":
                 args.append(str(qarg[1]))
             elif expect == "nextIndex":
                 qarg = qargs.pop(0)
@@ -36,10 +36,9 @@ class QuESTLibGate(Gate):
         if "mConRestIndex" in self.argOrder:
             for qarg in qargs:
                 rest.append(qarg[1])
-
         nTemp = 0
         for arg in self.argOrder:
-            if arg == "nextQureg" or arg == "nextIndex" or arg == "Index":
+            if arg == "nextQureg" or arg == "nextIndex" or arg == "index":
                 argString += ","+args.pop(0)
             elif arg == "mConRestIndex":
                 nTemp+=1
@@ -56,31 +55,31 @@ class QuESTLibGate(Gate):
                 nTemp += 1
                 tempVar = "tmp"+str(nTemp)
                 tempArg = [cargs.pop(0), cargs.pop(0)]
-                preString += [f"Complex {tempVar}",
-                              f"{tempVar}.real = {tempArg[0]}",
-                              f"{tempVar}.imag = {tempArg[1]}"]
+                preString += [f"Complex {tempVar} = {{{','.join(tempArg)}}}"]
                 argString += f",{tempVar}"
             elif arg == "complexMatrix2Carg":
                 nTemp += 1
                 tempVar = "tmp"+str(nTemp)
                 tempArg = [cargs.pop(0), cargs.pop(0), cargs.pop(0), cargs.pop(0)]
-                preString += [f"ComplexMatrix2 {tempVar}",
-                              f"{tempVar}.r0c0 = {tempArg[0]}",
-                              f"{tempVar}.r0c1 = {tempArg[1]}",
-                              f"{tempVar}.r1c0 = {tempArg[1]}",
-                              f"{tempVar}.r1c1 = {tempArg[1]}"]
+                preString += [f"ComplexMatrix2 {tempVar} = {{{','.join(tempArg)}}}"]
                 argString += f",{tempVar}"
-                
+            elif arg == "not":
+                nTemp += 1
+                tempVar = "not"
+                preString += [f"ComplexMatrix2 {tempVar} = {{0., 1., 1., 0.}}"]
+                argString += ","+tempVar
         return preString, argString.strip(',')
                 
     def to_c(self):
         pass
         
+#[ 0 1 1 0]
 
-QuESTLibGate(name = "x",   cargs = None, qargs = "a", argOrder = ("nextQureg", "Index"), internalName = "pauliX")
-QuESTLibGate(name = "cx",  cargs = None, qargs = "a", argOrder = ("nextQureg", "Index", "nextIndex"), internalName = "controlledNot")
-QuESTLibGate(name = "ccx", cargs = None, qargs = "a,b", argOrder = ("nextQureg", "mConRestIndex", "Index", "cargs"), internalName = "multiControlledNot")
-QuESTLibGate(name = "rotateX", cargs = "phi", qargs = "a", argOrder = ("nextQureg", "Index", "cargs"), internalName = "rotateX")
-QuESTLibGate(name = "rotateY", cargs = "theta", qargs = "a", argOrder = ("nextQureg", "Index", "cargs"), internalName = "rotateY")
-QuESTLibGate(name = "rotateZ", cargs = "lambda", qargs = "a", argOrder = ("nextQureg", "Index", "cargs"), internalName = "rotateZ")
-Gate(name = "U",   cargs = "theta,phi,lambda", qargs = "a", block = QASMBlock('Internal', 0, 'rotateZ(lambda) a;rotateY(theta) a;rotateX(phi) a;'))
+    
+QuESTLibGate(name = "x",   cargs = None, qargs = "a", argOrder = ("nextQureg", "index"), internalName = "pauliX")
+QuESTLibGate(name = "cx",  cargs = None, qargs = "a", argOrder = ("nextQureg", "index", "nextIndex"), internalName = "controlledNot")
+QuESTLibGate(name = "ccx", cargs = None, qargs = "a,b,c", argOrder = ("nextQureg", "mConRestIndex", "index", "not"), internalName = "multiControlledUnitary")
+QuESTLibGate(name = "rotateX", cargs = "phi", qargs = "a", argOrder = ("nextQureg", "index", "cargs"), internalName = "rotateX")
+QuESTLibGate(name = "rotateY", cargs = "theta", qargs = "a", argOrder = ("nextQureg", "index", "cargs"), internalName = "rotateY")
+QuESTLibGate(name = "rotateZ", cargs = "lambda", qargs = "a", argOrder = ("nextQureg", "index", "cargs"), internalName = "rotateZ")
+
