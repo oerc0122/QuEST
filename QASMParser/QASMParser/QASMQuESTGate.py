@@ -1,4 +1,5 @@
 from .QASMParser import *
+from copy import copy
 # def __init__(self, filename, noFile = False):
 # def __init__(self, name, cargs, qargs, block, QuESTGate = False, internalName = None):
 # def __init__(self, parentName, startline, block):
@@ -19,7 +20,9 @@ class QuESTLibGate(Gate):
         qargs = [[arg[0], arg[0]+"_index"] for arg in qargs]
         return qargs
         
-    def reorder_args(self, qargs, cargs):
+    def reorder_args(self, qargsIn, cargsIn):
+        qargs = copy(qargsIn)
+        cargs = copy(cargsIn)
         argString = ""
         preString = []
         args = []
