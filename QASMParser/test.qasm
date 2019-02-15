@@ -8,6 +8,7 @@ gate majority a,b,c
   cx c,a; 
   ccx a,b,c; 
 }
+
 rgate unmaj a,b,c 
 { 
   ccx a,b,c; 
@@ -55,7 +56,12 @@ measure b[0] -> ans[0];
 measure b[1] -> ans[1];
 measure b[2] -> ans[2];
 measure b[3] -> ans[3];
+
 measure cout[0] -> ans[4];
+
+creg loopVar[4];
+measure b -> loopVar;
+
 if (ans[0] == 1) { CBLOCK { printf("%i", 128); } };
 
 U(0,0,lambda) a;

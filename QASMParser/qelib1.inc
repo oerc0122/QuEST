@@ -6,5 +6,3 @@ gate U(theta, phi, lambda) a {
      rotateY(theta) a;
      rotateZ(phi) a;
 }
-;
-
