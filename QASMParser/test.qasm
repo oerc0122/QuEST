@@ -65,3 +65,6 @@ measure b -> loopVar;
 if (ans[0] == 1) { CBLOCK { printf("%i", 128); } };
 
 U(0,0,lambda) a;
+
+reset a;
+reset b[2];
