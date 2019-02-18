@@ -1,5 +1,5 @@
 // quantum ripple-carry adder from Cuccaro et al, quant-ph/0410184
-OPENQASM 2.0;
+OAQEQASM 2.0;
 include "qelib1.inc";
 
 gate majority a,b,c 
@@ -7,6 +7,9 @@ gate majority a,b,c
   cx c,b; 
   cx c,a; 
   ccx a,b,c; 
+}
+
+opaque magic a {
 }
 
 rgate unmaj a,b,c 
@@ -40,6 +43,8 @@ x a[0];
 x b;    
 // add a to b, storing result in b
 
+barrier a, b;
+
 majority cin[0],b[0],a[0];
 majority a[0],b[1],a[1];
 majority a[1],b[2],a[2];
@@ -68,3 +73,4 @@ U(0,0,lambda) a;
 
 reset a;
 reset b[2];
+
