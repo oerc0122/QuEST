@@ -1,19 +1,11 @@
 import copy
 
 from .QASMTokens import *
-from .langs.Base import *
+from .QASMTypes import *
 from .FileHandle import *
-# Declare several warnings which may occur
-argWarning  = 'Bad argument list in {} expected {}, recieved {}'
-existWarning  = '{Type} {Name} has not been declared'
-eofWarning = 'Unexpected end of file while {}'
-dupWarning = '{Type} {Name} is already declared'
-fileWarning = '{message} in {file} at line {line}'
-fnfWarning  = 'File {} not found'
-typeWarning = 'Unrecognised type {} requested in function {}'
-indexWarning = "Index {Req} out of range for {Var}, max index {Max}"
-argSizeWarning = "Args {Var} and {Var2} are different sizes and cannot be implicitly assigned.\n" + indexWarning
-includeNotMainWarning = "Cannot include files in block {}"
+from importlib import import_module
+from .QASMErrors import *
+
 
 class ProgFile(CodeBlock):
     def __init__(self, filename):
@@ -22,7 +14,13 @@ class ProgFile(CodeBlock):
         self._funcs= copy.copy(Gate.internalGates)
         self.parse_instructions()
         
-    def to_lang(self, filename = None):
+    def to_lang(self, filename = None, lang = "C"):
+        try:
+            lang = import_module(f"QASMParser.langs.{lang}")
+            lang.set_lang()
+        except ImportError:
+            raise NotImplementedError(langNotDefWarning.format(lang))
+            
         if filename:
             with open(filename, 'w') as outputFile:
                 for line in self._code:
@@ -57,6 +55,3 @@ class ProgFile(CodeBlock):
                     self._funcs[func]  = other._funcs[func]
         else:
             raise TypeError(f'Cannot combine {type(self).__name__} with {type(other).__name__}')
-
-
-
