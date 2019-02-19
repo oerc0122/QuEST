@@ -76,7 +76,7 @@ coreTokens.add(Token('gate', '{} {}?\s+{} $'.format(coreTokens.funcName,coreToke
 openQASM.add(Token('createReg', '(?P<regType>[qc])reg\s+{}'.format(coreTokens.namedQubit)))
 openQASM.add(Token('measure', 'measure\s+{}? -> {}'.format(coreTokens.namedQubit,coreTokens.namedParam)))
 openQASM.add(Token('wholeLineComment','^ //(?P<comment>.*)'))
-openQASM.add(Token('version', '(?P<Version>[a-zA-Z]+QASM)\s+(?P<majorVer>\d+)\.(?P<minorVer>\d+)'))
+openQASM.add(Token('version', '(?P<version>[a-zA-Z]+QASM)\s+(?P<majorVer>\d+)\.(?P<minorVer>\d+)'))
 openQASM.add(Token('include', 'include\s+[\'"](?P<filename>(?:\w|[./])+)[\'"]'))
 openQASM.add(Token('reset', 'reset\s+{}'.format(coreTokens.namedQubit)))
 openQASM.add(Token('barrier', 'barrier\s+{}'.format(coreTokens.qargList)))
@@ -92,6 +92,7 @@ OAQEQASM = TokenSet()
 
 OAQEQASM.add(Token('forLoop', 'for\s+(?P<var>{})\s+in\s+\[(?P<range>{})\] do'.format(coreTokens.validName, coreTokens.validRef)))
 OAQEQASM.add(Token('CBlock', 'CBLOCK'))
+OAQEQASM.add(Token('PyBlock', 'PYBLOCK'))
 OAQEQASM.add(Token('createRGate', 'rgate\s+{}'.format(coreTokens.gate)))
 
 OAQEQASM = OAQEQASM + openQASM
