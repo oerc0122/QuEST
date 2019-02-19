@@ -6,13 +6,15 @@ import re
 class QASMFile:
 
     _QASMFiles = []
-
+    depth_limit = 10
+    
     def __init__(self,filename, reqVersion=("2","0")):
         if filename in QASMFile._QASMFiles: raise IOError('Circular dependency in includes')
         if os.path.isfile(filename): self.File = open(filename,'r')
         else: raise FileNotFoundError()
         self.path = filename
         self.name = filename[filename.rfind('/')+1:] # Remove path
+        if len(QASMFile._QASMFiles) > self.depth_limit: self._error(recursionError.format(self.depth_limit))
         QASMFile._QASMFiles.append(self.name)
         self.nLine = 0
         temp = ''
