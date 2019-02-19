@@ -24,26 +24,26 @@ class VarHandler:
             
     def handle_loops(self, pargs, slice = None):
         for parg in pargs:
-            index = parg[1]
-            if index is None:
-                index = parg[0].name + "_index"
-                self.add_loop(index, 1, parg[0].size)
+            parg[1] = parg[1]
+            if parg[1] is None:
+                parg[1] = parg[0].name + "_index"
+                self.add_loop(parg[1], 1, parg[0].size)
                 
-            elif isinstance(index, str):
-                pargSplit = index.split(':')
+            elif isinstance(parg[1], str):
+                pargSplit = parg[1].split(':')
                 if len(pargSplit) == 1: # Just index
                     if pargSplit[0].isdecimal():
-                        index = int(pargSplit[0])
+                        parg[1] = int(pargSplit[0])
                     else: # Do nothing, assume the variable is fine
                         pass
                     
                 elif len(pargSplit) == 2: # Min Max
-                    index = parg[0].name + "_index"
+                    parg[1] = parg[0].name + "_index"
                     pargMin = 1
                     pargMax = parg[0].size
                     if pargSplit[0]: pargMin = int(pargSplit[0])
                     if pargSplit[1]: pargMax = int(pargSplit[1])
-                    self.add_loop(index, pargMin, pargMax)
+                    self.add_loop(parg[1], pargMin, pargMax)
                     
                 else: raise IOError('Bad Index syntax')
         
@@ -58,7 +58,6 @@ class Comment:
 
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
-
         
 class Variable:
     def __init__(self, name, size, classical):
@@ -93,7 +92,7 @@ class CallGate(VarHandler):
         else: self._cargs = []
 
     def __repr__(self):
-        return f"{self.gate}({','.join(self._cargs)}) {self._qargs}"
+        return f"{self.name}({','.join(self._cargs)}) {self._qargs}"
 
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
@@ -329,7 +328,8 @@ class IfBlock(CodeBlock):
     def __init__(self, cond, block):
         self._cond = cond
         CodeBlock.__init__(self, block)
-
+        self.parse_instructions()
+        
 class Gate(CodeBlock):
 
     gates = {}

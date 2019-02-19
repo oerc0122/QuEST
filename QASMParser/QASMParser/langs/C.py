@@ -10,11 +10,19 @@ def set_lang():
     IfBlock.to_lang = IfBlock_to_c
     Gate.to_lang = CreateGate_to_c
     CBlock.to_lang = CBlock_to_c
-    PyBlock.to_lang = PyBlock_to_c
     Loop.to_lang = Loop_to_c
     Reset.to_lang = Reset_to_c
 
 def Reset_to_c(self):
+    qarg = self._qargs[0]
+    qindex = self._qargs[1]
+    if not self._loops:
+        return f'collapseToOutcome({qarg.name}, {qindex}, 0);'
+    else:
+        if self._loops.end == qarg.size:
+            return f'initStateZero({qarg.name});'
+        else:
+            self.print_loops()
     return ""
     
 def Variable_to_c(self):
@@ -43,9 +51,6 @@ def CBlock_to_c(self):
         instruction = nextLine()
     return outStr
     
-def PyBlock_to_c(self):
-    raise NotImplementedError(langWarning.format('PyBlock'))
-    
 def CallGate_to_c(self):
     if self.name in Gate.internalGates:
         gateRef   = Gate.internalGates[self.name]
@@ -57,7 +62,6 @@ def CallGate_to_c(self):
             printArgs += ", "+carg
         printGate = self.name
         preString = []
-
     
     outString = ""
     indent = "  "
@@ -66,7 +70,7 @@ def CallGate_to_c(self):
     if self._loops:
         for line in preString:
             outString += indent*depth + line + ";\n"
-        self.print_loops()
+        outString += self.print_loops()
     else:
         for line in preString:
             outString += indent*depth + line + ";\n"
@@ -77,7 +81,7 @@ def Comment_to_c(self):
     return "//" + self.comment
 
 def Measure_to_c(self):
-    carg = self._cargs[0]
+    carg = self._cargs[0].name
     bindex = self._cargs[1]
     qarg = self._qargs[0]
     qindex = self._qargs[1]
@@ -85,7 +89,6 @@ def Measure_to_c(self):
     mainString = f"{carg}[{bindex}] = measure({qarg.name}, {qindex})"
     if self._loops:
         return self.print_loops()
-#        return self.print_loops(mainString, 0, True)
     else:
         return mainString
 
