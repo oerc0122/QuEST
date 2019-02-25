@@ -94,5 +94,6 @@ OAQEQASM.add(Token('forLoop', 'for\s+(?P<var>{})\s+in\s+\[(?P<range>{})\] do'.fo
 OAQEQASM.add(Token('CBlock', 'CBLOCK'))
 OAQEQASM.add(Token('PyBlock', 'PYBLOCK'))
 OAQEQASM.add(Token('createRGate', 'rgate\s+{}'.format(coreTokens.gate)))
+OAQEQASM.add(Token('exit', 'exit'))
 
 OAQEQASM = OAQEQASM + openQASM
