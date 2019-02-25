@@ -124,6 +124,17 @@ class Reset(VarHandler):
     def __repr__(self):
         return f"reset {self.qarg}[{self.qindex}]"
 
+class EntryExit:
+    def __init__(self, parent):
+        self.parent = parent
+        self.depth = 1
+
+    def exited(self):
+        self.depth = 0
+        
+    def to_lang(self):
+        raise NotImplementedError(langWarning.format(type(self).__name__))
+
 class CodeBlock:
     def __init__(self, block):
         self._code = []
@@ -187,6 +198,12 @@ class CodeBlock:
         
         self._code += [measure]
 
+    def leave(self):
+        if hasattr(self, entry):
+            self.entry.exited()
+        else:
+            self._error('Cannot exit from a non-recursive gate')
+        
     def _resolve(self, var, type_, reason = ""):
         if type_ == "Index":
             if var in self._cargs: return self._cargs[var]
@@ -275,6 +292,8 @@ class CodeBlock:
             qarg = match.group('qargName')
             qindex = match.group('qubitIndex')
             self.add_reset(qarg, qindex)
+        elif token.name == "exit":
+            self.leave()
         else:
             self._error(instructionWarning.format(line.lstrip().split()[0], self.currentFile.QASMType))
         
@@ -337,7 +356,9 @@ class Gate(CodeBlock):
 
     def __init__(self, name, cargs, qargs, block, recursive = False, opaque = False):
         self.name = name
-        if recursive: Gate.gates[self.name] = "Temp"
+        if recursive:
+            Gate.gates[self.name] = "Temp"
+            self.entry = EntryExit(self.name)
         if opaque and len(block) == 0 : block.File = [';']
         CodeBlock.__init__(self,block)
         if qargs:
@@ -351,7 +372,8 @@ class Gate(CodeBlock):
         self._argNames = [arg.name for arg in list(self._qargs.values()) + list(self._cargs.values())]
         self.parse_instructions()
         Gate.gates[self.name] = self
-
+        if recursive and self.entry.depth > 0: self._error(noExitWarning.format(self.name))
+        
     def new_variable(self, argument):
         if not argument.classical: raise IOError('Cannot declare new qarg in gate')
         else : raise IOError('Cannot declare new carg in gate')

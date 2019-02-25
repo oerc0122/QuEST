@@ -13,3 +13,4 @@ instructionWarning = "Unrecognised instruction: {} not in {} format"
 langWarning = "QASM instruction {} not implemented in output language."
 langNotDefWarning = "Language {0} translation not found, check QASMParser/langs/{0}.py exists."
 recursionError = "Include depth exceeds {}, possible recursion"
+noExitWarning = "Recursive gate {} does not have defined exit'
