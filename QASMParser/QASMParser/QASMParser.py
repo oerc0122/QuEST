@@ -30,8 +30,14 @@ class ProgFile(CodeBlock):
                 print(line.to_lang())
     
     def run(self):
+        try:
+            lang = import_module(f"QASMParser.langs.Python")
+            lang.set_lang()
+        except ImportError:
+            raise NotImplementedError(langNotDefWarning.format(lang))
+
         for line in self._code:
-            exec(line.to_python())
+            exec(line.to_lang())
 
     def include(self, filename):
         other = ProgFile(filename)
