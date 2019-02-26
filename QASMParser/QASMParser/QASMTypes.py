@@ -212,7 +212,7 @@ class CodeBlock:
             elif var in self._qargs:  self._error(argWarning.format(reason, "index", "qreg"))
             else: self._error(argWarning.format(reason, "Index", "Unknown"))
 
-    def add_reset(self, qarg, qindex):
+    def reset(self, qarg, qindex):
         if qarg not in self._qargs : self._error(existWarning.format(Type = 'Qreg', Name = qarg))
         else : qarg = self._qargs[qarg]
         if qindex:
@@ -223,7 +223,11 @@ class CodeBlock:
         reset = Reset( [qarg, qindex] )
         
         self._code += [reset]
-            
+
+    def loop(self, var, block, start, end):
+        loop = Loop(block, var, start, end)
+        self._code += [loop]
+        
     def new_if(self, cond, block):
         self._code += [IfBlock(cond, block)]
 
@@ -291,7 +295,12 @@ class CodeBlock:
         elif token.name == "reset":
             qarg = match.group('qargName')
             qindex = match.group('qubitIndex')
-            self.add_reset(qarg, qindex)
+            self.reset(qarg, qindex)
+        elif token.name == "forLoop":
+            var = match.group('var')
+            start, end = match.group('range').split(':')
+            block = self.parse_block("for loop")
+            self.loop(var, block, start, end)
         elif token.name == "exit":
             self.leave()
         else:
@@ -386,6 +395,7 @@ class Gate(CodeBlock):
 class Loop(CodeBlock):
     def __init__(self, block, var, start, end, step = 1):
         CodeBlock.__init__(self,block)
+        self._pargs += [var]
         self.depth = 1
         self.var = var
         self.start = start
