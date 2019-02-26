@@ -74,3 +74,6 @@ U(0,0,lambda) a;
 reset a;
 reset b[2];
 
+// for Q in [1:3] do {
+//     hadamard a[Q]
+// }

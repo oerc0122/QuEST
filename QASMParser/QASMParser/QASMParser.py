@@ -1,9 +1,9 @@
+from importlib import import_module
 import copy
 
 from .QASMTokens import *
 from .QASMTypes import *
 from .FileHandle import *
-from importlib import import_module
 from .QASMErrors import *
 
 

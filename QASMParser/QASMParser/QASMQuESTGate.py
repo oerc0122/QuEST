@@ -1,8 +1,5 @@
 from .QASMParser import *
 from copy import copy
-# def __init__(self, filename, noFile = False):
-# def __init__(self, name, cargs, qargs, block, QuESTGate = False, internalName = None):
-# def __init__(self, parentName, startline, block):
 
 class QuESTLibGate(Gate):
     def __init__(self, name, cargs, qargs, argOrder, internalName):
@@ -42,7 +39,7 @@ class QuESTLibGate(Gate):
         nTemp = 0
         for arg in self.argOrder:
             if arg == "nextQureg" or arg == "nextIndex" or arg == "index":
-                argString += ","+args.pop(0)
+                argString += ", "+args.pop(0)
             elif arg == "mConRestIndex":
                 nTemp+=1
                 tempVar = "tmp"+str(nTemp)
@@ -52,7 +49,7 @@ class QuESTLibGate(Gate):
             elif arg == "nextCarg":
                 argString += f"{cargs.pop(0)}"
             elif arg == "cargs":
-                argString += f",{','.join(cargs)}"
+                argString += f", {', '.join(cargs)}"
                 cargs = []
             elif arg == "complexCarg":
                 nTemp += 1
@@ -73,11 +70,6 @@ class QuESTLibGate(Gate):
                 argString += ","+tempVar
         return preString, argString.strip(',')
                 
-    def to_c(self):
-        pass
-        
-#[ 0 1 1 0]
-
     
 QuESTLibGate(name = "x",   cargs = None, qargs = "a", argOrder = ("nextQureg", "index"), internalName = "pauliX")
 QuESTLibGate(name = "cx",  cargs = None, qargs = "a", argOrder = ("nextQureg", "index", "nextIndex"), internalName = "controlledNot")
