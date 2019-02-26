@@ -16,7 +16,7 @@ class QuESTLibGate(Gate):
         Gate.internalGates[self.name] = self
         
     def parse_qarg_string(self, qargString):
-        qargs = [ tokens.namedQubit(qarg).groups() for qarg in qargString.split(',')]
+        qargs = [ coreTokens.namedQubit(qarg).groups() for qarg in qargString.split(',')]
         qargs = [[arg[0], arg[0]+"_index"] for arg in qargs]
         return qargs
         

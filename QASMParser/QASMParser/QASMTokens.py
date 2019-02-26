@@ -1,12 +1,13 @@
+import copy
 import re
 
 class Token:
 
     def __init__(self, name: str, pattern: str):
         self.name = name
-        self.re = re.compile(pattern, re.I + re.X)
+        self.re = re.compile(pattern.replace(' ','\s*'), re.I + re.X)
         self.string = pattern
-
+        
     def __str__(self):
         return self.string
 
@@ -15,72 +16,84 @@ class Token:
     
 
 class TokenSet(dict):
-    
-    def __init__(self):
-        self._hlevel = {}
-
-    def add(self, token: Token, hlevel = False):
+    def add(self, token: Token):
         if token not in self.__dict__: self.__dict__[token.name] = token
         else: raise IOError(f'Token {token.name} already in tokenSet')
-        if hlevel : self._hlevel[token.name] = token
 
-tokens = TokenSet()
+    def __add__(self, other):
+        out = copy.copy(self.__dict__)
+        for token in other.__dict__.values():
+            if token not in out: out[token.name] = token
+        new = TokenSet()
+        new.__dict__ = out
+        return new
+
+    def tokens(self):
+        return self.__dict__.values()
+    
+coreTokens = TokenSet()
+openQASM = TokenSet()
 
 # Base Types
-tokens.add(Token('blank', '^\s*$'))
-tokens.add(Token('int', '\d+(?:[eE]+?\d+)?'))
-tokens.add(Token('float', '[+-]?(?:\d*\.)?\d+(?:[eE][+-]?\d+)?'))
-tokens.add(Token('compOp', '(?:<|>|==|!=)'))
-tokens.add(Token('compJoin', '(?:&&|\|\|)'))
-tokens.add(Token('mathOp', '[-+*/^]'))
-tokens.add(Token('funcOp', '(?:sin|cos|tan|exp|ln|sqrt)'))
-tokens.add(Token('validName', '[a-z]\w*'))
-tokens.add(Token('openBlock', '\{'),True)
-tokens.add(Token('closeBlock', '\}'),True)
+coreTokens.add(Token('blank', '^\s*$'))
+coreTokens.add(Token('int', '\d+(?:[eE]+?\d+)?'))
+coreTokens.add(Token('float', '[+-]?(?:\d*\.)?\d+(?:[eE][+-]?\d+)?'))
+coreTokens.add(Token('compOp', '(?:<|>|==|!=)'))
+coreTokens.add(Token('compJoin', '(?:&&|\|\|)'))
+coreTokens.add(Token('mathOp', '[-+*/^]'))
+coreTokens.add(Token('funcOp', '(?:sin|cos|tan|exp|ln|sqrt)'))
+coreTokens.add(Token('validName', '[a-z]\w*'))
+coreTokens.add(Token('openBlock', '\{'))
+coreTokens.add(Token('closeBlock', '\}'))
 
-tokens.add(Token('validSingRef', f'(?:(?:{tokens.int})|(?:{tokens.validName}))'))
-tokens.add(Token('validRef', r'(?:{}(?:\:{})?)'.format(tokens.validSingRef, tokens.validSingRef)))
-           
-tokens.add(Token('qubitRef', '(?:\[{}\])'.format(tokens.validRef)))
-tokens.add(Token('namedQubitRef', '(?:\[(?P<qubitIndex>{})\])'.format(tokens.validRef)))
-tokens.add(Token('namedBitRef', '(?:\[(?P<bitIndex> {})\])'.format(tokens.validRef)))
-tokens.add(Token('namedQarg', '(?P<qargName>{})'.format(tokens.validName)))
-tokens.add(Token('namedCarg', '(?P<cargName>{})'.format(tokens.validName)))
+coreTokens.add(Token('validSingRef', f'(?:(?:{coreTokens.int})|(?:{coreTokens.validName}))'))
+coreTokens.add(Token('validRef', r'(?:{}(?:\:{})?)'.format(coreTokens.validSingRef, coreTokens.validSingRef)))
 
-tokens.add(Token('qarg', '{}\s*{}?'.format(tokens.validName,tokens.qubitRef)))
-tokens.add(Token('singCarg', '(?:{}|{}|{}{}?)'.format(tokens.float,tokens.int,tokens.validName,tokens.qubitRef)))
-tokens.add(Token('cargOp', '{}(?:\s*{}\s*{})*'.format(tokens.singCarg,tokens.mathOp,tokens.singCarg)))
-tokens.add(Token('funcCarg', '(?:(?:{}\({}\))|(?:{}))'.format(tokens.funcOp,tokens.cargOp, tokens.cargOp)))
-tokens.add(Token('carg', '{}(?:\s*{}\s*{})*'.format(tokens.funcCarg, tokens.mathOp, tokens.funcCarg)))
-           
-tokens.add(Token('funcName', '(?P<funcName>{})'.format(tokens.validName)))
-tokens.add(Token('namedQubit', '{}\s*{}?'.format(tokens.namedQarg,tokens.namedQubitRef)))
-tokens.add(Token('namedParam', '{}\s*{}?'.format(tokens.namedCarg,tokens.namedBitRef)))
+coreTokens.add(Token('qubitRef', '(?:\[{}\])'.format(coreTokens.validRef)))
+coreTokens.add(Token('namedQubitRef', '(?:\[(?P<qubitIndex>{})\])'.format(coreTokens.validRef)))
+coreTokens.add(Token('namedBitRef', '(?:\[(?P<bitIndex> {})\])'.format(coreTokens.validRef)))
+coreTokens.add(Token('namedQarg', '(?P<qargName>{})'.format(coreTokens.validName)))
+coreTokens.add(Token('namedCarg', '(?P<cargName>{})'.format(coreTokens.validName)))
 
-tokens.add(Token('singCond','{}\s*{}\s*{}'.format(tokens.carg,tokens.compOp,tokens.carg)))
-tokens.add(Token('conditional','{}(?:\s*{}\s*{})*'.format(tokens.singCond,tokens.compJoin,tokens.singCond)))
+coreTokens.add(Token('qarg', '{} {}?'.format(coreTokens.validName,coreTokens.qubitRef)))
+coreTokens.add(Token('singCarg', '(?:{}|{}|{}{}?)'.format(coreTokens.float,coreTokens.int,coreTokens.validName,coreTokens.qubitRef)))
+coreTokens.add(Token('cargOp', '{}(?: {} {})*'.format(coreTokens.singCarg,coreTokens.mathOp,coreTokens.singCarg)))
+coreTokens.add(Token('funcCarg', '(?:(?:{}\({}\))|(?:{}))'.format(coreTokens.funcOp,coreTokens.cargOp, coreTokens.cargOp)))
+coreTokens.add(Token('carg', '{}(?: {} {})*'.format(coreTokens.funcCarg, coreTokens.mathOp, coreTokens.funcCarg)))
 
-tokens.add(Token('qargList', '(?P<qargs>{}\s*(?:,\s*{})*)'.format(tokens.qarg,tokens.qarg)))
-tokens.add(Token('cargList', '(?:\((?P<cargs>{}\s*(?:,\s*{})*)\))'.format(tokens.carg,tokens.carg)))
+coreTokens.add(Token('funcName', '(?P<funcName>{})'.format(coreTokens.validName)))
+coreTokens.add(Token('namedQubit', '{} {}?'.format(coreTokens.namedQarg,coreTokens.namedQubitRef)))
+coreTokens.add(Token('namedParam', '{} {}?'.format(coreTokens.namedCarg,coreTokens.namedBitRef)))
 
-tokens.add(Token('comment', '//(?P<comment>.*)$'))
-tokens.add(Token('createReg', '(?P<regType>[qc])reg\s+{}'.format(tokens.namedQubit)), True)
-tokens.add(Token('measure', 'measure\s+{}?\s*->\s*{}'.format(tokens.namedQubit,tokens.namedParam)), True)
-tokens.add(Token('wholeLineComment','^\s*//(?P<comment>.*)'), True)
-tokens.add(Token('version', 'OPENQASM\s+(?P<majorVer>\d+)\.(?P<minorVer>\d+)'), True)
-tokens.add(Token('include', 'include\s+[\'"](?P<filename>(?:\w|[./])+)[\'"]'), True)
-tokens.add(Token('gate', '{}\s*{}?\s+{}'.format(tokens.funcName,tokens.cargList,tokens.qargList)))
-tokens.add(Token('createGate', '(?P<recurse>r)?gate\s+{}'.format(tokens.gate)), True)
-tokens.add(Token('callGate', tokens.gate.string), True)
-tokens.add(Token('CBlock', 'CBLOCK'), True)
-tokens.add(Token('reset', 'reset {}'.format(tokens.qargList)))
-tokens.add(Token('qop', re.sub(r'\(\?P\<[a-zA-Z]+\>','(','(?:{}|{}|{}|{})'.format(tokens.gate,tokens.createReg,tokens.include,tokens.measure))))
+coreTokens.add(Token('singCond','{} {} {}'.format(coreTokens.carg,coreTokens.compOp,coreTokens.carg)))
+coreTokens.add(Token('conditional','{}(?: {} {})*'.format(coreTokens.singCond,coreTokens.compJoin,coreTokens.singCond)))
 
-tokens.add(Token('ifLine','if\s*\((?P<cond>{cond})\)(?P<op>\s*{op})?'.format(cond=tokens.conditional,op=tokens.qop)), True)
-tokens.add(Token('line',
-                 '(?:(?:{ifLine})|(?:{newGate})|(?:{qop})|(?:{ver}));\s*(?:{comm})?'.format(
-                     ifLine = tokens.ifLine,
-                     newGate= tokens.createGate,
-                     qop = tokens.qop,
-                     ver = tokens.version,
-                     comm = tokens.comment)))
+coreTokens.add(Token('qargList', '(?P<qargs>{} (?:, {})*)'.format(coreTokens.qarg,coreTokens.qarg)))
+coreTokens.add(Token('cargList', '(?:\((?P<cargs>{} (?:, {})*)\))'.format(coreTokens.carg,coreTokens.carg)))
+coreTokens.add(Token('comment', '//(?P<comment>.*)$'))
+coreTokens.add(Token('gate', '{} {}?\s+{} $'.format(coreTokens.funcName,coreTokens.cargList,coreTokens.qargList)))
+
+openQASM.add(Token('createReg', '(?P<regType>[qc])reg\s+{}'.format(coreTokens.namedQubit)))
+openQASM.add(Token('measure', 'measure\s+{}? -> {}'.format(coreTokens.namedQubit,coreTokens.namedParam)))
+openQASM.add(Token('wholeLineComment','^ //(?P<comment>.*)'))
+openQASM.add(Token('version', '(?P<version>[a-zA-Z]+QASM)\s+(?P<majorVer>\d+)\.(?P<minorVer>\d+)'))
+openQASM.add(Token('include', 'include\s+[\'"](?P<filename>(?:\w|[./])+)[\'"]'))
+openQASM.add(Token('reset', 'reset\s+{}'.format(coreTokens.namedQubit)))
+openQASM.add(Token('barrier', 'barrier\s+{}'.format(coreTokens.qargList)))
+openQASM.add(Token('opaque', 'opaque\s+{}'.format(coreTokens.gate)))
+openQASM.add(Token('createGate', 'gate\s+{}'.format(coreTokens.gate)))
+openQASM.add(Token('callGate', coreTokens.gate.string))
+openQASM.add(Token('qop', re.sub(r'\(\?P\<[a-zA-Z]+\>','(','(?:{})'.format('|'.join(
+    map(str,[openQASM.callGate,openQASM.createReg,openQASM.include,openQASM.measure, openQASM.reset]))
+))))
+openQASM.add(Token('ifLine','if \((?P<cond>{cond})\)(?P<op> {op})?'.format(cond=coreTokens.conditional,op=openQASM.qop)))
+
+OAQEQASM = TokenSet()
+
+OAQEQASM.add(Token('forLoop', 'for\s+(?P<var>{})\s+in\s+\[(?P<range>{})\] do'.format(coreTokens.validName, coreTokens.validRef)))
+OAQEQASM.add(Token('CBlock', 'CBLOCK'))
+OAQEQASM.add(Token('PyBlock', 'PYBLOCK'))
+OAQEQASM.add(Token('createRGate', 'rgate\s+{}'.format(coreTokens.gate)))
+OAQEQASM.add(Token('exit', 'exit'))
+
+OAQEQASM = OAQEQASM + openQASM
