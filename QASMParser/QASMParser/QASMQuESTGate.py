@@ -3,6 +3,7 @@ from copy import copy
 
 class QuESTLibGate(Gate):
     def __init__(self, name, cargs, qargs, argOrder, internalName):
+        self.type_ = "Gate"
         self.name = name
         self._cargs = {}
         self._qargs = {}

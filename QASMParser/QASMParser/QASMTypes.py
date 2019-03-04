@@ -1,6 +1,6 @@
 from .QASMErrors import *
 from .QASMTokens import *
-from .FileHandle import QASMFile, QASMBlock
+from .FileHandle import QASMFile, QASMBlock, NullBlock
 import copy
 
 class VarHandler:
@@ -58,27 +58,55 @@ class Comment:
 
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
-        
-class Variable:
-    def __init__(self, name, size, classical):
+
+class Referencable:
+    def __init__(self):
+        self.type_ = type(self).__name__
+    
+class Constant(Referencable):
+    def __init__(self, name, val):
+        Referencable.__init__(self)
+        self.name = name
+        self.val  = val
+
+    def to_lang(self):
+        raise NotImplementedError(langWarning.format(type(self).__name__))
+
+class Register(Referencable):
+    def __init__(self, name, size):
+        Referencable.__init__(self)
         self.name = name
         self.size = int(size)
-        self.classical = classical
 
     def __repr__(self):
         return f"{self.name}[{self.size}]"
 
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
+    
+class QuantumRegister(Register):
+    pass
 
-class Argument:
+class ClassicalRegister(Register):
+    pass
+    
+class Argument(Referencable):
     def __init__(self, name, classical):
+        Referencable.__init__(self)
         self.name = name
         self.classical = classical
 
     def __repr__(self):
         if classical: return self.name
         else: return self.name
+
+    def to_lang(self):
+        raise NotImplementedError(langWarning.format(type(self).__name__))
+
+class Let:
+    def __init__(self, var, val):
+        self.var = var
+        self.val = val
 
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
@@ -136,11 +164,18 @@ class EntryExit:
         raise NotImplementedError(langWarning.format(type(self).__name__))
 
 class CodeBlock:
-    def __init__(self, block):
+    def __init__(self, block, parent, copyObjs = True, copyFuncs = True):
         self._code = []
         self._qargs= {}
         self._cargs= {}
-        self._funcs= copy.copy(Gate.gates)
+        if copyObjs:
+            self._objs = copy.copy(parent._objs)
+        else:
+            self._objs = {}
+        if copyFuncs:
+            self._funcs= copy.copy(parent._funcs)
+        else:
+            self._funcs = {}
         self.currentFile = block
         self.instructions = self.currentFile.read_instruction()
         self._error = self.currentFile._error
@@ -160,35 +195,50 @@ class CodeBlock:
         self._code += [Comment(comment)]
 
     def new_variable(self, argName, size, classical):
-        variable = Variable(argName, size, classical)
-        if variable in self._cargs or variable in self._qargs or variable in self._funcs:
-            raise OSError(dupWarning.format(Type = "Variable", Name = variable.name))
+        self._is_def(argName, create=True)
+
+        if classical:
+            variable = ClassicalRegister(argName, size)
+            self._cargs[argName] = variable
+            self._objs[argName] = variable
+        else:
+            variable = QuantumRegister(argName, size)
+            self._qargs[argName] = variable
+            self._objs[argName] = variable
+            
         self._code += [variable]
-        if variable.classical: self._cargs[variable.name] = variable
-        else:                  self._qargs[variable.name] = variable
 
     def gate(self, funcName, cargs, qargs, block, recursive = None, opaque = None):
-        if funcName in self._funcs: raise self._error(dupWarning.format('Gate', gate))
-        gate = Gate(funcName, cargs, qargs, block, recursive, opaque)
+        self._is_def(funcName, create=True)
+
+        gate = Gate(self, funcName, cargs, qargs, block, recursive, opaque)
         self._funcs[gate.name] = gate
+        self._objs[gate.name] = gate
         self._code += [gate]
 
+    def let(self, var, val):
+        self._is_def(var, create=True)
+        self._objs[var] = Constant(var,val)
+        self._code += [Let(var, val)]
+        
     def call_gate(self, funcName, cargs, qargs):
+        self._is_def(funcName, create=False, type_ = 'Gate')
+        
         qargs = self.parse_qarg_string(qargs)
-        if funcName not in self._funcs: self._error(existWarning.format(Type = 'Gate', Name = funcName))
+        # if funcName not in self._funcs: self._error(existWarning.format(Type = 'Gate', Name = funcName))
         gate = CallGate(funcName, cargs, qargs)
         self._code += [gate]
 
     def measurement(self, qarg, qindex, carg, bindex):
-        if carg not in self._cargs : self._error(existWarning.format(Type = 'Creg', Name = carg))
-        else : carg = self._cargs[carg]
+        self._is_def(carg, create=False, type_ = 'ClassicalRegister')
+        self._is_def(qarg, create=False, type_ = 'QuantumRegister')
+        carg = self._cargs[carg]
+        qarg = self._qargs[qarg]
         if bindex:
             bindex = int(bindex)
             if bindex > carg.size - 1 or bindex < 0 :
                 self._error(indexWarning.format(Var=carg,Req=bindex,Max=carg.size))
 
-        if qarg not in self._qargs : self._error(existWarning.format(Type = 'Qreg', Name = qarg))
-        else : qarg = self._qargs[qarg]
         if qindex:
             qindex = int(qindex)
             if qindex > qarg.size - 1 or qindex < 0 :
@@ -199,18 +249,10 @@ class CodeBlock:
         self._code += [measure]
 
     def leave(self):
-        if hasattr(self, entry):
+        if hasattr(self, "entry"):
             self.entry.exited()
         else:
             self._error('Cannot exit from a non-recursive gate')
-        
-    def _resolve(self, var, type_, reason = ""):
-        if type_ == "Index":
-            if var in self._cargs: return self._cargs[var]
-            elif tokens.int(var): return int(var)
-            elif tokens.float(var): self._error(argWarning.format(reason, "index", "float"))
-            elif var in self._qargs:  self._error(argWarning.format(reason, "index", "qreg"))
-            else: self._error(argWarning.format(reason, "Index", "Unknown"))
 
     def reset(self, qarg, qindex):
         if qarg not in self._qargs : self._error(existWarning.format(Type = 'Qreg', Name = qarg))
@@ -229,11 +271,46 @@ class CodeBlock:
         self._code += [loop]
         
     def new_if(self, cond, block):
-        self._code += [IfBlock(cond, block)]
+        self._code += [IfBlock(self, cond, block)]
 
     def cBlock(self, block):
-        self._code += [CBlock(block)]
+        self._code += [CBlock(self, block)]
 
+    def _resolve(self, var, index, type_, reason = ""):
+        if type_ == "Index":
+            if var.is_decimal():
+                return int(var)
+            self._is_def(var, create=False, type_ = "Index")
+            return self._objs[var]
+        
+        elif type_ in ["ClassicalRegister","QuantumRegister"]:
+            self._is_def(var, create=False, type_ = type_)
+            # Add index checking?
+            return self._objs[var]
+        
+        elif type_ == "Constant":
+            self._is_def(var, create=False, type_ = type_)
+            return self._objs[var]
+        
+        elif type_ == "Gate":
+            self._is_def(var, create=False, type_ = type_)
+            # Add argument checking?
+            return self._objs[var]
+        
+    def _is_def(self, name, create, type_ = None):
+        if create: # Check for duplicate naming
+            if name in self._objs: self._error(dupWarning.format(Name=name, Type=self._objs[name].type_))
+                                               
+        else: # Check exists and type is right
+            if name not in self._objs:
+                self._error(existWarning.format(Type=type_, Name=name))
+            elif type_ == "Index": # Special case for index vars
+                if self._objs[name].type_ not in ['Constant', 'ClassicalRegister']:
+                    self._error(wrongTypeWarning.format(self._objs[name].type_, type_))
+            elif self._objs[name].type_ is not type_:
+                self._error(wrongTypeWarning.format(self._objs[name].type_, type_))
+            else: pass
+                                                                
     def parse_line(self, line, token):
         match = token(line)
         if token.name == "include":
@@ -301,6 +378,10 @@ class CodeBlock:
             start, end = match.group('range').split(':')
             block = self.parse_block("for loop")
             self.loop(var, block, start, end)
+        elif token.name == "let":
+            var = match.group('var')
+            val = match.group('val')
+            self.let(var, val)
         elif token.name == "exit":
             self.leave()
         else:
@@ -345,31 +426,33 @@ class CodeBlock:
         raise NotImplementedError(langWarning.format(type(self).__name__))
 
 class CBlock(CodeBlock):
-    def __init__(self, block):
-        CodeBlock.__init__(self,block)
+    def __init__(self, parent, block):
+        CodeBlock.__init__(self,block, parent=parent)
         
 class PyBlock(CodeBlock):
-    def __init__(self, block):
-        CodeBlock.__init__(self,block)
+    def __init__(self, parent, block):
+        CodeBlock.__init__(self,block, parent=parent)
 
 class IfBlock(CodeBlock):
-    def __init__(self, cond, block):
+    def __init__(self, parent, cond, block):
         self._cond = cond
-        CodeBlock.__init__(self, block)
+        CodeBlock.__init__(self, block, parent=parent)
         self.parse_instructions()
         
-class Gate(CodeBlock):
+class Gate(Referencable, CodeBlock):
 
     gates = {}
     internalGates = {}
 
-    def __init__(self, name, cargs, qargs, block, recursive = False, opaque = False):
+    def __init__(self, parent, name, cargs, qargs, block, recursive = False, opaque = False):
+        Referencable.__init__(self)
         self.name = name
-        if recursive:
-            Gate.gates[self.name] = "Temp"
-            self.entry = EntryExit(self.name)
         if opaque and len(block) == 0 : block.File = [';']
-        CodeBlock.__init__(self,block)
+        CodeBlock.__init__(self, block, parent=parent)
+        if recursive:
+            self.gate(name, cargs, qargs, NullBlock(block))
+            self.entry = EntryExit(self.name)
+        
         if qargs:
             for qarg in qargs.split(','):
                 self._qargs[qarg] = Argument(qarg, False)
@@ -393,8 +476,8 @@ class Gate(CodeBlock):
         return qargs
 
 class Loop(CodeBlock):
-    def __init__(self, block, var, start, end, step = 1):
-        CodeBlock.__init__(self,block)
+    def __init__(self, parent, block, var, start, end, step = 1):
+        CodeBlock.__init__(self,block, parent=parent)
         self._pargs += [var]
         self.depth = 1
         self.var = var

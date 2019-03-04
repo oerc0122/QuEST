@@ -60,6 +60,7 @@ class QASMFile:
         line = self.readline()
         lines = ""
         depth = 0
+        instructions = []
         while line is not None:
             lines += line.rstrip('\n')
             if openQASM.wholeLineComment(lines):
@@ -77,6 +78,7 @@ class QASMFile:
             line = self.readline()
         # Catch remainder
         tmpInstructions = lines.split(';')
+    
         for instruction in tmpInstructions:
             instructions += self.block_split(instruction)
         while instructions:
@@ -114,4 +116,25 @@ class QASMBlock(QASMFile):
             return None
 
     def __del__(self):
-        del self
+        pass
+
+
+class NullBlock(QASMFile):
+    def __init__(self, parent):
+        self.name = parent.name
+        self.version = parent.version
+        self.File = [';']
+        self.nLine = parent.nLine
+        self.read = False
+        
+    def __len__(self):
+        return 0
+
+    def readline(self):
+        if not self.read:
+            self.read = True
+            return "// "
+        return None
+
+    def __del__(self):
+        pass
