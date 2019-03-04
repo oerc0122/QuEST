@@ -95,5 +95,6 @@ OAQEQASM.add(Token('CBlock', 'CBLOCK'))
 OAQEQASM.add(Token('PyBlock', 'PYBLOCK'))
 OAQEQASM.add(Token('createRGate', 'rgate\s+{}'.format(coreTokens.gate)))
 OAQEQASM.add(Token('exit', 'exit'))
+OAQEQASM.add(Token('let', 'let\s+(?P<var>{}) = (?P<val>{})'.format(coreTokens.validName, coreTokens.carg)))
 
 OAQEQASM = OAQEQASM + openQASM

@@ -10,8 +10,10 @@ from .QASMErrors import *
 class ProgFile(CodeBlock):
     def __init__(self, filename):
         self.filename = filename
-        CodeBlock.__init__(self,QASMFile(filename))
-        self._funcs= copy.copy(Gate.internalGates)
+        CodeBlock.__init__(self, QASMFile(filename), parent = None, copyFuncs = False, copyObjs = False)
+        for gate in Gate.internalGates.values():
+            self._funcs[gate.name] = gate
+            self._objs[gate.name] = gate
         self.parse_instructions()
         
     def to_lang(self, filename = None, lang = "C"):
@@ -43,20 +45,24 @@ class ProgFile(CodeBlock):
         other = ProgFile(filename)
         if isinstance(other, ProgFile):
             self._code += other._code
+            for obj in other._objs:
+                if obj in self._objs:
+                    print(obj)
+                    self._error(includeWarning.format(name = obj, type = self._objs[obj].type_, other = other.filename, me = self.filename))
             for qarg in other._qargs:
                 if qarg in self._qargs:
-                    raise IOError('Symbol defined in {other.filename} already defined in {self.filename}')
+                    self._error(includeWarning.format(name = obj, type = self._objs[obj].type_, other = other.filename, me = self.filename))
                 else:
                     self._qargs[qarg]  = other._qargs[qarg]
             for carg in other._cargs:
                 if carg in self._cargs:
-                    raise IOError('Symbol defined in {other.filename} already defined in {self.filename}')
+                    self._error(includeWarning.format(name = obj, type = self._objs[obj].type_, other = other.filename, me = self.filename))
                 else:
                     self._cargs[carg]  = other._cargs[carg]
             for func in other._funcs:
                 if func in Gate.internalGates: continue
                 if func in self._funcs:
-                    raise IOError('Symbol defined in {other.filename} already defined in {self.filename}')
+                    self._error(includeWarning.format(name = obj, type = self._objs[obj].type_, other = other.filename, me = self.filename))
                 else:
                     self._funcs[func]  = other._funcs[func]
         else:

@@ -12,12 +12,14 @@ gate majority a,b,c
 opaque magic a {
 }
 
-rgate unmaj a,b,c 
-{ 
+rgate unmaj(i) a,b,c 
+{
+  let j = i - 1;
   ccx a,b,c; 
   cx c,a; 
   cx a,b;
-  unmaj a,a,a
+  unmaj(j) a,a,a;
+  exit;
 }
 
 CBLOCK
