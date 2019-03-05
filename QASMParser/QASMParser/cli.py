@@ -5,6 +5,7 @@ parser.add_argument('sources', nargs=argparse.REMAINDER, help="List of sources t
 parser.add_argument('-o','--output', help="File to compile to")
 parser.add_argument('-l','--language', help="Output file language")
 parser.add_argument('-d','--debug', help="Output original QASM in translation", action="store_true")
+parser.add_argument('-c','--to-module', help = "Compile as module for inclusion into larger project", action="store_true")
 
 def get_command_args():
     return parser.parse_args()

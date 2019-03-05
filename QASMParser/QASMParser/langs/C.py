@@ -15,10 +15,21 @@ def set_lang():
     Loop.to_lang = Loop_to_c
     NestLoop.to_lang = Loop_to_c
     Reset.to_lang = Reset_to_c
+    InitEnv.to_lang = init_env
 
-blockOpen = "{"
-blockClose = "}"
-indent = "  "
+# Several details pertaining to the language in question
+hoistFuncs = True   # Move functions to front of program
+hoistVars  = False  # Move variables to front of program
+bareCode   = False  # Can code be bare or does it need to be in function
+blockOpen = "{"     # Block delimiters
+blockClose = "}"    #  ""      ""
+indent = "  "       # Standard indent depth
+
+def include(filename):
+    return f'#include "{filename}"'
+
+def init_env(self):
+    return f'QuESTEnv Env = createQuESTEnv();'
 
 def Reset_to_c(self):
     qarg = self._qargs[0]
@@ -26,7 +37,7 @@ def Reset_to_c(self):
     return f'collapseToOutcome({qarg.name}, {qindex}, 0);'
     
 def ClassicalRegister_to_c(self):
-    return f'int[{self.size}] {self.name};'
+    return f'int {self.name}[{self.size}];'
 
 def QuantumRegister_to_c(self):
     return f"Qureg {self.name} = createQureg({self.size}, Env);"
@@ -83,15 +94,15 @@ def Measure_to_c(self):
     qarg = self._qargs[0]
     qindex = self._qargs[1]
 
-    return f"{carg}[{bindex}] = measure({qarg.name}, {qindex})"
+    return f"{carg}[{bindex}] = measure({qarg.name}, {qindex});"
 
 def IfBlock_to_c(self):
     return f"if ({self._cond})"
 
 def CreateGate_to_c(self):
-    printArgs = ", ".join([f"{qarg}, {qarg}_index" for qarg in self._qargs])
+    printArgs = ", ".join([f"Qureg {qarg}, int {qarg}_index" for qarg in self._qargs])
     for carg in self._cargs:
-        printArgs += ", "+carg
+        printArgs += ", float "+carg
     outStr = f"void {self.name}({printArgs})"
     return outStr
 

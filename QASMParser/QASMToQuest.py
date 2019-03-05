@@ -24,4 +24,4 @@ if argList.output:
 else:
     outputFile = None
 
-myProg.to_lang(outputFile, lang, verbose=argList.debug)
+myProg.to_lang(outputFile, argList.to_module, lang, verbose=argList.debug)
