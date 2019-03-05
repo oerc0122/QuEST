@@ -13,14 +13,15 @@ class VarHandler:
         if self._loops:
             self._loops = NestLoop(self._loops, index, start, end)
         else:
-            self._loops = NestLoop(self, index, start, end)
+            self.innermost = NestLoop(copy.copy(self), index, start, end)
+            self._loops = self.innermost
 
-    def print_loops(self):
-        loops = self._loops
-        self._loops = None
-        outString = loops.to_lang()
-        self._loops = loops
-        return outString
+    def finalise_loops(self):
+        if self._loops:
+            self.innermost._code = [copy.copy(self)]
+            self.innermost._code[0]._loops = []
+        else:
+            pass
             
     def handle_loops(self, pargs, slice = None):
         for parg in pargs:
@@ -46,7 +47,6 @@ class VarHandler:
                     self.add_loop(parg[1], pargMin, pargMax)
                     
                 else: raise IOError('Bad Index syntax')
-        
                 
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
@@ -119,9 +119,6 @@ class CallGate(VarHandler):
         if cargs: self._cargs = cargs.split(',')
         else: self._cargs = []
 
-    def __repr__(self):
-        return f"{self.name}({','.join(self._cargs)}) {self._qargs}"
-
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
 
@@ -133,13 +130,20 @@ class Measure(VarHandler):
         bindex = self._cargs[1]
         qarg = self._qargs[0]
         qindex = self._qargs[1]
-        
+        # Check bindices
         if bindex is None:
             if carg.size < qarg.size:
                 raise IOError(argSizeWarning.format(Req=qarg.size, Var=carg.name, Var2 = qarg.name, Max=carg.size))
             if carg.size > qarg.size:
                 raise IOError(argSizeWarning.format(Req=carg.size, Var=qarg.name, Var2 = carg.name, Max=qarg.size))
             self._cargs[1] = self._qargs[1]
+
+        self.carg = self._cargs[0]
+        self.bindex = self._cargs[1]
+        self.qarg = self._qargs[0]
+        self.qindex = self._qargs[1]
+
+        self.finalise_loops()
         
     def __repr__(self):
         return f"measure {self.qarg}[{self.qindex}] -> {self.carg}[{self.bindex}]"
@@ -386,7 +390,8 @@ class CodeBlock:
             self.leave()
         else:
             self._error(instructionWarning.format(line.lstrip().split()[0], self.currentFile.QASMType))
-        
+        self._code[-1].original = line
+            
     def parse_qarg_string(self, qargString):
         qargs = [ coreTokens.namedQubit(qarg).groups() for qarg in qargString.split(',')]
         for qarg in qargs:
@@ -451,6 +456,7 @@ class Gate(Referencable, CodeBlock):
         CodeBlock.__init__(self, block, parent=parent)
         if recursive:
             self.gate(name, cargs, qargs, NullBlock(block))
+            self._code = []
             self.entry = EntryExit(self.name)
         
         if qargs:

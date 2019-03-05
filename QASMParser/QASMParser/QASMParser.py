@@ -1,6 +1,5 @@
 from importlib import import_module
-import copy
-
+import os
 from .QASMTokens import *
 from .QASMTypes import *
 from .FileHandle import *
@@ -16,21 +15,43 @@ class ProgFile(CodeBlock):
             self._objs[gate.name] = gate
         self.parse_instructions()
         
-    def to_lang(self, filename = None, lang = "C"):
+    def to_lang(self, filename = None, lang = "C", verbose = False):
         try:
             lang = import_module(f"QASMParser.langs.{lang}")
             lang.set_lang()
         except ImportError:
             raise NotImplementedError(langNotDefWarning.format(lang))
+
+        self.depth = 0
+        
+        def print_code(self, code, outputFile):
+            indent = lang.indent
+            writeln = lambda toWrite: outputFile.write(self.depth*indent + toWrite + "\n")
+            for line in code:
+                print(line)
+                if verbose and hasattr(line,'original') and type(line) is not Comment:
+                    outputFile.write(self.depth*indent + Comment(line.original).to_lang() + "\n")
+                if hasattr(line,"_loops") and line._loops:
+                    writeln(line._loops.to_lang() + lang.blockOpen)
+                    self.depth += 1
+                    print_code(self,line._loops._code,outputFile)
+                    writeln(lang.blockClose)
+                elif hasattr(line,"_code") and line._code:
+                    writeln(line.to_lang() + lang.blockOpen)
+                    self.depth += 1
+                    print_code(self,line._code,outputFile)
+                    writeln(lang.blockClose)
+                else: writeln(line.to_lang())
+                
+            self.depth -= 1
             
         if filename:
             with open(filename, 'w') as outputFile:
-                for line in self._code:
-                    outputFile.write(line.to_lang() + "\n")
+                print_code(self, self._code, outputFile)
         else:
-            for line in self._code:
-                print(line.to_lang())
-    
+            print_code(self, self._code, os.stdout)
+
+        
     def run(self):
         try:
             lang = import_module(f"QASMParser.langs.Python")
@@ -46,9 +67,11 @@ class ProgFile(CodeBlock):
         if isinstance(other, ProgFile):
             self._code += other._code
             for obj in other._objs:
+                if obj in Gate.internalGates: continue
                 if obj in self._objs:
-                    print(obj)
                     self._error(includeWarning.format(name = obj, type = self._objs[obj].type_, other = other.filename, me = self.filename))
+                else:
+                    self._objs[obj] = other._objs[obj]
             for qarg in other._qargs:
                 if qarg in self._qargs:
                     self._error(includeWarning.format(name = obj, type = self._objs[obj].type_, other = other.filename, me = self.filename))
