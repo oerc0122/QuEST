@@ -45,7 +45,7 @@ class QuESTLibGate(Gate):
                 nTemp+=1
                 tempVar = "tmp"+str(nTemp)
                 nRest     = len(rest)
-                preString += [f"int[{nRest}] {tempVar} = {{"+",".join(rest)+"}"]
+                preString += [f"int {tempVar}[{nRest}] = {{"+",".join(rest)+"}"]
                 argString += f", (int*){tempVar}, {nRest}"
             elif arg == "nextCarg":
                 argString += f"{cargs.pop(0)}"
@@ -70,8 +70,7 @@ class QuESTLibGate(Gate):
                 preString += [f"ComplexMatrix2 {tempVar} = {{0., 1., 1., 0.}}"]
                 argString += ","+tempVar
         return preString, argString.strip(',')
-                
-    
+
 QuESTLibGate(name = "x",   cargs = None, qargs = "a", argOrder = ("nextQureg", "index"), internalName = "pauliX")
 QuESTLibGate(name = "cx",  cargs = None, qargs = "a", argOrder = ("nextQureg", "index", "nextIndex"), internalName = "controlledNot")
 QuESTLibGate(name = "ccx", cargs = None, qargs = "a,b,c", argOrder = ("nextQureg", "mConRestIndex", "index", "not"), internalName = "multiControlledUnitary")

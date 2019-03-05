@@ -78,14 +78,17 @@ class Register(Referencable):
         self.name = name
         self.size = int(size)
 
-    def __repr__(self):
-        return f"{self.name}[{self.size}]"
-
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
     
 class QuantumRegister(Register):
-    pass
+
+    numQubits = 0
+    
+    def __init__(self, name, size):
+        Register.__init__(self, name, size)
+        self.start = QuantumRegister.numQubits
+        QuantumRegister.numQubits += self.size
 
 class ClassicalRegister(Register):
     pass
@@ -95,10 +98,6 @@ class Argument(Referencable):
         Referencable.__init__(self)
         self.name = name
         self.classical = classical
-
-    def __repr__(self):
-        if classical: return self.name
-        else: return self.name
 
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
@@ -115,9 +114,9 @@ class CallGate(VarHandler):
     def __init__(self, gate, cargs, qargs):
         self.name = gate
         VarHandler.__init__(self, qargs, cargs)
-        self.handle_loops(self._qargs)
         if cargs: self._cargs = cargs.split(',')
         else: self._cargs = []
+        self.handle_loops(self._qargs)
 
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
@@ -137,24 +136,12 @@ class Measure(VarHandler):
             if carg.size > qarg.size:
                 raise IOError(argSizeWarning.format(Req=carg.size, Var=qarg.name, Var2 = carg.name, Max=qarg.size))
             self._cargs[1] = self._qargs[1]
-
-        self.carg = self._cargs[0]
-        self.bindex = self._cargs[1]
-        self.qarg = self._qargs[0]
-        self.qindex = self._qargs[1]
-
         self.finalise_loops()
         
-    def __repr__(self):
-        return f"measure {self.qarg}[{self.qindex}] -> {self.carg}[{self.bindex}]"
-
 class Reset(VarHandler):
     def __init__(self, qarg):
         VarHandler.__init__(self, qarg)
         self.handle_loops([self._qargs])
-
-    def __repr__(self):
-        return f"reset {self.qarg}[{self.qindex}]"
 
 class EntryExit:
     def __init__(self, parent):
@@ -176,10 +163,6 @@ class CodeBlock:
             self._objs = copy.copy(parent._objs)
         else:
             self._objs = {}
-        if copyFuncs:
-            self._funcs= copy.copy(parent._funcs)
-        else:
-            self._funcs = {}
         self.currentFile = block
         self.instructions = self.currentFile.read_instruction()
         self._error = self.currentFile._error
@@ -216,7 +199,6 @@ class CodeBlock:
         self._is_def(funcName, create=True)
 
         gate = Gate(self, funcName, cargs, qargs, block, recursive, opaque)
-        self._funcs[gate.name] = gate
         self._objs[gate.name] = gate
         self._code += [gate]
 
@@ -229,7 +211,6 @@ class CodeBlock:
         self._is_def(funcName, create=False, type_ = 'Gate')
         
         qargs = self.parse_qarg_string(qargs)
-        # if funcName not in self._funcs: self._error(existWarning.format(Type = 'Gate', Name = funcName))
         gate = CallGate(funcName, cargs, qargs)
         self._code += [gate]
 
@@ -503,3 +484,10 @@ class NestLoop(Loop):
         if step != 1: raise NotImplementedError('Non contiguous loops not currently permitted')
         self.step = step
                     
+class InitEnv:
+    # Initialise QuESTEnv
+    def __init__(self):
+        pass
+
+    def to_lang(self):
+        raise NotImplementedError(langWarning.format(type(self).__name__))

@@ -18,12 +18,12 @@ class QASMFile:
         QASMFile._QASMFiles.append(self.name)
         self.nLine = 0
         temp = ''
-        self.header = ''
+        self.header = []
         try:
             line=self.readline()
             while line is not None:
                 if openQASM.wholeLineComment(line):
-                    self.header += line
+                    self.header += [line]
                 elif openQASM.version(line):
                     self.version = openQASM.version(line).group('version','minorVer','majorVer')
                     self.QASMType, self.majorVer, self.minorVer = self.version
