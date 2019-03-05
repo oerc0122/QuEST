@@ -17,7 +17,7 @@ class QuESTLibGate(Gate):
         qargs = [ coreTokens.namedQubit(qarg).groups() for qarg in qargString.split(',')]
         qargs = [[arg[0], arg[0]+"_index"] for arg in qargs]
         return qargs
-        
+
     def reorder_args(self, qargsIn, cargsIn):
         qargs = copy(qargsIn)
         cargs = copy(cargsIn)
