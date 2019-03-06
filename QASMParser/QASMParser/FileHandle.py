@@ -99,6 +99,7 @@ class QASMBlock(QASMFile):
     def __init__(self, parent, startline, block):
         self.name = parent.name
         self.version = parent.version
+        self.QASMType = parent.QASMType
         self.File = block.splitlines()
         self.orig = block
         self.nLine = startline
@@ -121,11 +122,11 @@ class QASMBlock(QASMFile):
     def __del__(self):
         pass
 
-
 class NullBlock(QASMFile):
     def __init__(self, parent):
         self.name = parent.name
         self.version = parent.version
+        self.QASMType = parent.QASMType
         self.File = [';']
         self.nLine = parent.nLine
         self.read = False
