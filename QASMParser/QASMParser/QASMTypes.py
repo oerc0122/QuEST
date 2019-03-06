@@ -59,8 +59,12 @@ class Operation:
                     return arg[1]
             elif type(arg[1]) is int:
                 return str(arg[0].start + int(arg[1]))
+            elif type(arg[1]) is Constant:
+                return str(arg[1].val)
+            else:
+                raise TypeError(parseArgWarning.format("index", type(arg[1]).__name__))
         else:
-            raise TypeError("Issue parsing arg")
+            raise TypeError(parseArgWarning.format("arg", type(arg[0]).__name__))
 
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
@@ -107,7 +111,15 @@ class QuantumRegister(Register):
 
 class ClassicalRegister(Register):
     pass
-    
+
+class Alias(Register):
+    def __init__(self, name, referee, start, end):
+        size = end - start + 1
+        Register.__init__(self, name, size)
+        self.start = referee.start + start
+        self.end   = self.start + size
+        self.type_ = "QuantumRegister"
+        
 class Argument(Referencable):
     def __init__(self, name, classical):
         Referencable.__init__(self)
@@ -190,7 +202,7 @@ class CodeBlock:
         self.currentFile = block
         self.instructions = self.currentFile.read_instruction()
         self._error = self.currentFile._error
-        QASMType = self.currentFile.version[0]
+        QASMType = self.currentFile.QASMType
         if QASMType == "OPENQASM":
             self.tokens = openQASM
         elif QASMType == "OAQEQASM":
@@ -210,16 +222,21 @@ class CodeBlock:
 
         if classical:
             variable = ClassicalRegister(argName, size)
-            self._cargs[argName] = variable
             self._objs[argName] = variable
         else:
             variable = QuantumRegister(argName, size)
-            self._qargs[argName] = variable
             self._objs[argName] = variable
             
         self._code += [variable]
 
-    def gate(self, funcName, cargs, qargs, block, recursive = None, opaque = None):
+    def alias(self, argName, referee, index):
+        self._is_def(argName, create=True)
+        referee = self._resolve(referee, type_="QuantumRegister")
+        start, end = self.parse_range(index)
+        alias = Alias(argName, referee, start, end)
+        self._objs[argName] = alias
+        
+    def gate(self, funcName, cargs, qargs, block, recursive = False, opaque = False):
         self._is_def(funcName, create=True)
 
         gate = Gate(self, funcName, cargs, qargs, block, recursive, opaque)
@@ -252,21 +269,10 @@ class CodeBlock:
         self._code += [gate]
 
     def measurement(self, qarg, qindex, carg, bindex):
-        self._is_def(carg, create=False, type_ = 'ClassicalRegister')
-        self._is_def(qarg, create=False, type_ = 'QuantumRegister')
-        carg = self._cargs[carg]
-        qarg = self._qargs[qarg]
-        if bindex:
-            bindex = int(bindex)
-            if bindex > carg.size - 1 or bindex < 0 :
-                self._error(indexWarning.format(Var=carg,Req=bindex,Max=carg.size))
+        carg = self._resolve(carg, type_ = 'ClassicalRegister', index=bindex)
+        qarg = self._resolve(qarg, type_ = 'QuantumRegister', index=qindex)
 
-        if qindex:
-            qindex = int(qindex)
-            if qindex > qarg.size - 1 or qindex < 0 :
-                self._error(indexWarning.format(Var=qarg,Req=qindex,Max=qarg.size))
-
-        measure = Measure( [qarg, qindex], [carg, bindex] )
+        measure = Measure( qarg, carg )
         
         self._code += [measure]
 
@@ -277,32 +283,19 @@ class CodeBlock:
             self._error('Cannot exit from a non-recursive gate')
 
     def reset(self, qarg, qindex):
-        if qarg not in self._qargs : self._error(existWarning.format(Type = 'Qreg', Name = qarg))
-        else : qarg = self._qargs[qarg]
-        if qindex:
-            qindex = int(qindex)
-            if qindex > qarg.size - 1 or qindex < 0 :
-                self._error(indexWarning.format(Var=qarg,Req=qindex,Max=qarg.size))
-
-        reset = Reset( [qarg, qindex] )
+        qarg = self._resolve(qarg, type_="QuantumRegister", index=qindex)
+        reset = Reset( qarg )
         
         self._code += [reset]
 
     def output(self, carg, bindex):
-        if carg not in self._cargs : self._error(existWarning.format(Type = 'Qreg', Name = carg))
-        else : carg = self._cargs[carg]
-        if bindex:
-            bindex = int(bindex)
-            if bindex > carg.size - 1 or bindex < 0 :
-                self._error(indexWarning.format(Var=carg,Req=bindex,Max=carg.size))
-
-        output = Output ( [carg, bindex] )
+        carg = self._resolve(carg, type_="ClassicalRegister", index=bindex)
+        output = Output ( carg )
         
         self._code += [output]
-
     
     def loop(self, var, block, start, end):
-        loop = Loop(block, var, start, end)
+        loop = Loop(self,block, var, start, end)
         self._code += [loop]
         
     def new_if(self, cond, block):
@@ -311,21 +304,40 @@ class CodeBlock:
     def cBlock(self, block):
         self._code += [CBlock(self, block)]
 
-    def _resolve(self, var, index, type_, reason = ""):
+    def _resolve(self, var, type_, index = ""):
         if type_ == "Index":
-            if var.is_decimal():
-                return int(var)
-            self._is_def(var, create=False, type_ = "Index")
-            return self._objs[var]
-        
-        elif type_ in ["ClassicalRegister","QuantumRegister"]:
+
+            if var is None:
+                return None
+
+            elif type(var) is str:
+
+                if var.isdecimal():
+                    return int(var)
+                else:
+                    self._is_def(var, create=False, type_ = "Index")
+                    return self._objs[var]
+            else:
+                self._error(indexTypeWarning.format(type(var).__name__))
+                
+        elif type_ in ["ClassicalRegister","QuantumRegister","Alias"]:
+
             self._is_def(var, create=False, type_ = type_)
-            # Add index checking?
-            return self._objs[var]
+            var = self._objs[var]
+
+            if index or index is None: # If index or implicit loop
+                index = self._resolve(index, "Index")
+                if type(index) is int and (index > var.size - 1 or index < 0) :
+                    self._error(indexWarning.format(Var=var.name,Req=index,Max=var.size))
+
+                return [var, index]
+            
+            else: # Usually arguments through here
+                return var
         
         elif type_ == "Constant":
             self._is_def(var, create=False, type_ = type_)
-            return self._objs[var]
+            return self._objs[var].val
         
         elif type_ == "Gate":
             self._is_def(var, create=False, type_ = type_)
@@ -343,7 +355,7 @@ class CodeBlock:
                 if self._objs[name].type_ not in ['Constant', 'ClassicalRegister']:
                     self._error(wrongTypeWarning.format(self._objs[name].type_, type_))
             elif self._objs[name].type_ is not type_:
-                self._error(wrongTypeWarning.format(self._objs[name].type_, type_))
+                self._error(wrongTypeWarning.format(type_,self._objs[name].type_))
             else: pass
                                                                 
     def parse_line(self, line, token):
@@ -410,7 +422,7 @@ class CodeBlock:
             self.reset(qarg, qindex)
         elif token.name == "forLoop":
             var = match.group('var')
-            start, end = match.group('range').split(':')
+            start, end = self.parse_range(match.group('range'))
             block = self.parse_block("for loop")
             self.loop(var, block, start, end)
         elif token.name == "let":
@@ -419,6 +431,11 @@ class CodeBlock:
             self.let(var, val)
         elif token.name == "exit":
             self.leave()
+        elif token.name == "alias":
+            name = match.group('alias')
+            qarg = match.group('qargName')
+            qindex = match.group('qubitIndex')
+            self.alias(name, qarg, qindex)
         elif token.name == "output":
             carg = match.group('cargName')
             bindex = match.group('bitIndex')
@@ -428,12 +445,9 @@ class CodeBlock:
         self._code[-1].original = line
             
     def parse_qarg_string(self, qargString):
-        qargs = [ coreTokens.namedQubit(qarg).groups() for qarg in qargString.split(',')]
+        qargs = [ list(coreTokens.namedQubit(qarg).groups()) for qarg in qargString.split(',')]
         for qarg in qargs:
-            if qarg[0] not in self._qargs: raise self._error(existWarning.format(Type = 'qreg', Name = qarg[0]))
-        qargs = [[self._qargs[arg[0]], int(arg[1])] if arg[1] is not None and arg[1].isdecimal()
-                 else [self._qargs[arg[0]], arg[1]]
-                 for arg in qargs]
+            qarg[0],qarg[1] = self._resolve(qarg[0], type_="QuantumRegister", index=qarg[1])
         return qargs
 
     def parse_instructions(self):
@@ -462,6 +476,26 @@ class CodeBlock:
             self._error(eofWarning.format(f'parsing block {blockName}'))
         return QASMBlock(self.currentFile, startline, block)
 
+    def parse_range(self, rangeSpec, arg = None):
+        if ":" not in rangeSpec:
+            return rangeSpec, rangeSpec
+        else:
+            if self.currentFile.QASMType != "OAQEQASM":
+                self._error(instructionWarning.format('Range specifier', self.currentFile.QASMType))
+
+            start,_,end = rangeSpec.partition(':')
+            start = self._resolve(start, type_ = "Index")
+            end   = self._resolve(end, type_ = "Index")
+            if arg:
+                if not start: start = 0
+                if not end: end = arg.size
+                if start < 0: self._error(indexWarning.format(Req=start, Var = arg.name, Max = arg.size))
+                elif end > arg.size: self._error(indexWarning.format(Req=end, Var = arg.name, Max = arg.size))
+            else:
+                if not start or not end:
+                    self._error(loopSpecWarning.format("end" if not end else "start"))
+            return start, end
+            
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
 
@@ -517,7 +551,7 @@ class Gate(Referencable, CodeBlock):
 class Loop(CodeBlock):
     def __init__(self, parent, block, var, start, end, step = 1):
         CodeBlock.__init__(self,block, parent=parent)
-        self._pargs += [var]
+        self._objs[var] = Constant(var, var)
         self.depth = 1
         self.var = var
         self.start = start
