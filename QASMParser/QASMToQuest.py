@@ -7,6 +7,7 @@ argList = get_command_args()
 for source in argList.sources:
     myProg = ProgFile(source)
 
+lang = None
 if argList.language:
     lang = argList.language
 elif argList.output.endswith('.py'):
@@ -16,9 +17,11 @@ elif argList.output.endswith('.c'):
 elif not argList.output:
     raise IOError('Neither language nor output specified')
 
+if not lang: raise IOError('No language specified')
+
 if argList.output:
     outputFile = argList.output
 else:
     outputFile = None
 
-myProg.to_lang(outputFile, lang)
+myProg.to_lang(outputFile, argList.to_module, lang, verbose=argList.debug)

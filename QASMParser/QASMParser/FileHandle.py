@@ -18,12 +18,12 @@ class QASMFile:
         QASMFile._QASMFiles.append(self.name)
         self.nLine = 0
         temp = ''
-        self.header = ''
+        self.header = []
         try:
             line=self.readline()
             while line is not None:
                 if openQASM.wholeLineComment(line):
-                    self.header += line
+                    self.header += [line]
                 elif openQASM.version(line):
                     self.version = openQASM.version(line).group('version','minorVer','majorVer')
                     self.QASMType, self.majorVer, self.minorVer = self.version
@@ -60,6 +60,7 @@ class QASMFile:
         line = self.readline()
         lines = ""
         depth = 0
+        instructions = []
         while line is not None:
             lines += line.rstrip('\n')
             if openQASM.wholeLineComment(lines):
@@ -77,6 +78,7 @@ class QASMFile:
             line = self.readline()
         # Catch remainder
         tmpInstructions = lines.split(';')
+    
         for instruction in tmpInstructions:
             instructions += self.block_split(instruction)
         while instructions:
@@ -98,6 +100,7 @@ class QASMBlock(QASMFile):
         self.name = parent.name
         self.version = parent.version
         self.File = block.splitlines()
+        self.orig = block
         self.nLine = startline
 
     def __len__(self):
@@ -111,7 +114,30 @@ class QASMBlock(QASMFile):
             if coreTokens.blank(line): continue
             return line
         else:
+            # Recallable
+            self.File = self.orig.splitlines()
             return None
 
     def __del__(self):
-        del self
+        pass
+
+
+class NullBlock(QASMFile):
+    def __init__(self, parent):
+        self.name = parent.name
+        self.version = parent.version
+        self.File = [';']
+        self.nLine = parent.nLine
+        self.read = False
+        
+    def __len__(self):
+        return 0
+
+    def readline(self):
+        if not self.read:
+            self.read = True
+            return "// "
+        return None
+
+    def __del__(self):
+        pass

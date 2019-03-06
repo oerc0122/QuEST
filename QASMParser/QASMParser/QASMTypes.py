@@ -1,9 +1,9 @@
 from .QASMErrors import *
 from .QASMTokens import *
-from .FileHandle import QASMFile, QASMBlock
+from .FileHandle import QASMFile, QASMBlock, NullBlock
 import copy
 
-class VarHandler:
+class Operation:
     def __init__(self, qargs = None, cargs = None):
         self._loops = None
         self._qargs = qargs
@@ -13,21 +13,22 @@ class VarHandler:
         if self._loops:
             self._loops = NestLoop(self._loops, index, start, end)
         else:
-            self._loops = NestLoop(self, index, start, end)
+            self.innermost = NestLoop(copy.copy(self), index, start, end)
+            self._loops = self.innermost
 
-    def print_loops(self):
-        loops = self._loops
-        self._loops = None
-        outString = loops.to_lang()
-        self._loops = loops
-        return outString
+    def finalise_loops(self):
+        if self._loops:
+            self.innermost._code = [copy.copy(self)]
+            self.innermost._code[0]._loops = []
+        else:
+            pass
             
     def handle_loops(self, pargs, slice = None):
         for parg in pargs:
             parg[1] = parg[1]
             if parg[1] is None:
                 parg[1] = parg[0].name + "_index"
-                self.add_loop(parg[1], 1, parg[0].size)
+                self.add_loop(parg[1], parg[0].start, parg[0].end)
                 
             elif isinstance(parg[1], str):
                 pargSplit = parg[1].split(':')
@@ -46,11 +47,28 @@ class VarHandler:
                     self.add_loop(parg[1], pargMin, pargMax)
                     
                 else: raise IOError('Bad Index syntax')
-        
-                
+
+    def resolve_arg(self, arg):
+        if type(arg[0]) is Argument:
+            return str(arg[1])
+        elif issubclass(type(arg[0]),Register):
+            if type(arg[1]) is str:
+                if arg[1].isdecimal():
+                    return str(arg[0].start + int(arg[1]))
+                else:
+                    return arg[1]
+            elif type(arg[1]) is int:
+                return str(arg[0].start + int(arg[1]))
+        else:
+            raise TypeError("Issue parsing arg")
+
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
-                
+
+class Referencable:
+    def __init__(self):
+        self.type_ = type(self).__name__
+    
 class Comment:
     def __init__(self, comment):
         self.name = comment
@@ -58,72 +76,97 @@ class Comment:
 
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
-        
-class Variable:
-    def __init__(self, name, size, classical):
+
+class Constant(Referencable):
+    def __init__(self, name, val):
+        Referencable.__init__(self)
+        self.name = name
+        self.val  = val
+
+    def to_lang(self):
+        raise NotImplementedError(langWarning.format(type(self).__name__))
+
+class Register(Referencable):
+    def __init__(self, name, size):
+        Referencable.__init__(self)
         self.name = name
         self.size = int(size)
-        self.classical = classical
-
-    def __repr__(self):
-        return f"{self.name}[{self.size}]"
 
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
+    
+class QuantumRegister(Register):
 
-class Argument:
+    numQubits = 0
+    
+    def __init__(self, name, size):
+        Register.__init__(self, name, size)
+        self.start = QuantumRegister.numQubits
+        self.end   = QuantumRegister.numQubits + self.size
+        QuantumRegister.numQubits += self.size
+
+class ClassicalRegister(Register):
+    pass
+    
+class Argument(Referencable):
     def __init__(self, name, classical):
+        Referencable.__init__(self)
         self.name = name
         self.classical = classical
 
-    def __repr__(self):
-        if classical: return self.name
-        else: return self.name
+    def to_lang(self):
+        raise NotImplementedError(langWarning.format(type(self).__name__))
+
+class Let:
+    def __init__(self, var, val):
+        self.var = var
+        self.val = val
 
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
 
-class CallGate(VarHandler):
+class CallGate(Operation):
     def __init__(self, gate, cargs, qargs):
         self.name = gate
-        VarHandler.__init__(self, qargs, cargs)
-        self.handle_loops(self._qargs)
-        if cargs: self._cargs = cargs.split(',')
+        Operation.__init__(self, qargs, cargs)
+        if cargs:
+            if type(cargs) is str:
+                self._cargs = cargs.split(',')
+            elif type(cargs) is list:
+                self._cargs = cargs
         else: self._cargs = []
-
-    def __repr__(self):
-        return f"{self.name}({','.join(self._cargs)}) {self._qargs}"
+        self.handle_loops(self._qargs)
 
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
 
-class Measure(VarHandler):
+class Measure(Operation):
     def __init__(self, qarg, carg):
-        VarHandler.__init__(self, qarg, carg)
+        Operation.__init__(self, qarg, carg)
         self.handle_loops([self._qargs])
         carg = self._cargs[0]
         bindex = self._cargs[1]
         qarg = self._qargs[0]
         qindex = self._qargs[1]
-        
+        # Check bindices
         if bindex is None:
             if carg.size < qarg.size:
                 raise IOError(argSizeWarning.format(Req=qarg.size, Var=carg.name, Var2 = qarg.name, Max=carg.size))
             if carg.size > qarg.size:
                 raise IOError(argSizeWarning.format(Req=carg.size, Var=qarg.name, Var2 = carg.name, Max=qarg.size))
             self._cargs[1] = self._qargs[1]
+        self.finalise_loops()
         
-    def __repr__(self):
-        return f"measure {self.qarg}[{self.qindex}] -> {self.carg}[{self.bindex}]"
-
-class Reset(VarHandler):
+class Reset(Operation):
     def __init__(self, qarg):
-        VarHandler.__init__(self, qarg)
+        Operation.__init__(self, qarg)
         self.handle_loops([self._qargs])
 
-    def __repr__(self):
-        return f"reset {self.qarg}[{self.qindex}]"
-
+class Output(Operation):
+    def __init__(self, carg):
+        Operation.__init__(self, carg)
+        self.handle_loops([self._cargs])
+        
 class EntryExit:
     def __init__(self, parent):
         self.parent = parent
@@ -136,11 +179,14 @@ class EntryExit:
         raise NotImplementedError(langWarning.format(type(self).__name__))
 
 class CodeBlock:
-    def __init__(self, block):
+    def __init__(self, block, parent, copyObjs = True, copyFuncs = True):
         self._code = []
         self._qargs= {}
         self._cargs= {}
-        self._funcs= copy.copy(Gate.gates)
+        if copyObjs:
+            self._objs = copy.copy(parent._objs)
+        else:
+            self._objs = {}
         self.currentFile = block
         self.instructions = self.currentFile.read_instruction()
         self._error = self.currentFile._error
@@ -160,35 +206,61 @@ class CodeBlock:
         self._code += [Comment(comment)]
 
     def new_variable(self, argName, size, classical):
-        variable = Variable(argName, size, classical)
-        if variable in self._cargs or variable in self._qargs or variable in self._funcs:
-            raise OSError(dupWarning.format(Type = "Variable", Name = variable.name))
+        self._is_def(argName, create=True)
+
+        if classical:
+            variable = ClassicalRegister(argName, size)
+            self._cargs[argName] = variable
+            self._objs[argName] = variable
+        else:
+            variable = QuantumRegister(argName, size)
+            self._qargs[argName] = variable
+            self._objs[argName] = variable
+            
         self._code += [variable]
-        if variable.classical: self._cargs[variable.name] = variable
-        else:                  self._qargs[variable.name] = variable
 
     def gate(self, funcName, cargs, qargs, block, recursive = None, opaque = None):
-        if funcName in self._funcs: raise self._error(dupWarning.format('Gate', gate))
-        gate = Gate(funcName, cargs, qargs, block, recursive, opaque)
-        self._funcs[gate.name] = gate
+        self._is_def(funcName, create=True)
+
+        gate = Gate(self, funcName, cargs, qargs, block, recursive, opaque)
+        self._objs[gate.name] = gate
         self._code += [gate]
 
+    def let(self, var, val):
+        self._is_def(var, create=True)
+        self._objs[var] = Constant(var,val)
+        self._code += [Let(var, val)]
+        
     def call_gate(self, funcName, cargs, qargs):
+        self._is_def(funcName, create=False, type_ = 'Gate')
+        
         qargs = self.parse_qarg_string(qargs)
-        if funcName not in self._funcs: self._error(existWarning.format(Type = 'Gate', Name = funcName))
-        gate = CallGate(funcName, cargs, qargs)
+        if funcName in Gate.internalGates:
+            gateRef = Gate.internalGates[funcName]
+            gate = CallGate(gateRef.internalName, cargs, qargs)
+            preString, outCargs = gateRef.reorder_args(gate._qargs,gate._cargs)
+            gate._qargs = []
+            gate._cargs = outCargs
+            if preString:
+                preString = "\n".join(preString)
+                preString = QASMBlock(self.currentFile, self.currentFile.nLine, preString)
+                self.cBlock(preString)
+            gate.finalise_loops()
+        else:
+            gate = CallGate(funcName, cargs, qargs)
+            
         self._code += [gate]
 
     def measurement(self, qarg, qindex, carg, bindex):
-        if carg not in self._cargs : self._error(existWarning.format(Type = 'Creg', Name = carg))
-        else : carg = self._cargs[carg]
+        self._is_def(carg, create=False, type_ = 'ClassicalRegister')
+        self._is_def(qarg, create=False, type_ = 'QuantumRegister')
+        carg = self._cargs[carg]
+        qarg = self._qargs[qarg]
         if bindex:
             bindex = int(bindex)
             if bindex > carg.size - 1 or bindex < 0 :
                 self._error(indexWarning.format(Var=carg,Req=bindex,Max=carg.size))
 
-        if qarg not in self._qargs : self._error(existWarning.format(Type = 'Qreg', Name = qarg))
-        else : qarg = self._qargs[qarg]
         if qindex:
             qindex = int(qindex)
             if qindex > qarg.size - 1 or qindex < 0 :
@@ -199,20 +271,12 @@ class CodeBlock:
         self._code += [measure]
 
     def leave(self):
-        if hasattr(self, entry):
+        if hasattr(self, "entry"):
             self.entry.exited()
         else:
             self._error('Cannot exit from a non-recursive gate')
-        
-    def _resolve(self, var, type_, reason = ""):
-        if type_ == "Index":
-            if var in self._cargs: return self._cargs[var]
-            elif tokens.int(var): return int(var)
-            elif tokens.float(var): self._error(argWarning.format(reason, "index", "float"))
-            elif var in self._qargs:  self._error(argWarning.format(reason, "index", "qreg"))
-            else: self._error(argWarning.format(reason, "Index", "Unknown"))
 
-    def add_reset(self, qarg, qindex):
+    def reset(self, qarg, qindex):
         if qarg not in self._qargs : self._error(existWarning.format(Type = 'Qreg', Name = qarg))
         else : qarg = self._qargs[qarg]
         if qindex:
@@ -223,13 +287,65 @@ class CodeBlock:
         reset = Reset( [qarg, qindex] )
         
         self._code += [reset]
-            
+
+    def output(self, carg, bindex):
+        if carg not in self._cargs : self._error(existWarning.format(Type = 'Qreg', Name = carg))
+        else : carg = self._cargs[carg]
+        if bindex:
+            bindex = int(bindex)
+            if bindex > carg.size - 1 or bindex < 0 :
+                self._error(indexWarning.format(Var=carg,Req=bindex,Max=carg.size))
+
+        output = Output ( [carg, bindex] )
+        
+        self._code += [output]
+
+    
+    def loop(self, var, block, start, end):
+        loop = Loop(block, var, start, end)
+        self._code += [loop]
+        
     def new_if(self, cond, block):
-        self._code += [IfBlock(cond, block)]
+        self._code += [IfBlock(self, cond, block)]
 
     def cBlock(self, block):
-        self._code += [CBlock(block)]
+        self._code += [CBlock(self, block)]
 
+    def _resolve(self, var, index, type_, reason = ""):
+        if type_ == "Index":
+            if var.is_decimal():
+                return int(var)
+            self._is_def(var, create=False, type_ = "Index")
+            return self._objs[var]
+        
+        elif type_ in ["ClassicalRegister","QuantumRegister"]:
+            self._is_def(var, create=False, type_ = type_)
+            # Add index checking?
+            return self._objs[var]
+        
+        elif type_ == "Constant":
+            self._is_def(var, create=False, type_ = type_)
+            return self._objs[var]
+        
+        elif type_ == "Gate":
+            self._is_def(var, create=False, type_ = type_)
+            # Add argument checking?
+            return self._objs[var]
+        
+    def _is_def(self, name, create, type_ = None):
+        if create: # Check for duplicate naming
+            if name in self._objs: self._error(dupWarning.format(Name=name, Type=self._objs[name].type_))
+                                               
+        else: # Check exists and type is right
+            if name not in self._objs:
+                self._error(existWarning.format(Type=type_, Name=name))
+            elif type_ == "Index": # Special case for index vars
+                if self._objs[name].type_ not in ['Constant', 'ClassicalRegister']:
+                    self._error(wrongTypeWarning.format(self._objs[name].type_, type_))
+            elif self._objs[name].type_ is not type_:
+                self._error(wrongTypeWarning.format(self._objs[name].type_, type_))
+            else: pass
+                                                                
     def parse_line(self, line, token):
         match = token(line)
         if token.name == "include":
@@ -291,12 +407,26 @@ class CodeBlock:
         elif token.name == "reset":
             qarg = match.group('qargName')
             qindex = match.group('qubitIndex')
-            self.add_reset(qarg, qindex)
+            self.reset(qarg, qindex)
+        elif token.name == "forLoop":
+            var = match.group('var')
+            start, end = match.group('range').split(':')
+            block = self.parse_block("for loop")
+            self.loop(var, block, start, end)
+        elif token.name == "let":
+            var = match.group('var')
+            val = match.group('val')
+            self.let(var, val)
         elif token.name == "exit":
             self.leave()
+        elif token.name == "output":
+            carg = match.group('cargName')
+            bindex = match.group('bitIndex')
+            self.output(carg, bindex)
         else:
             self._error(instructionWarning.format(line.lstrip().split()[0], self.currentFile.QASMType))
-        
+        self._code[-1].original = line
+            
     def parse_qarg_string(self, qargString):
         qargs = [ coreTokens.namedQubit(qarg).groups() for qarg in qargString.split(',')]
         for qarg in qargs:
@@ -336,42 +466,43 @@ class CodeBlock:
         raise NotImplementedError(langWarning.format(type(self).__name__))
 
 class CBlock(CodeBlock):
-    def __init__(self, block):
-        CodeBlock.__init__(self,block)
+    def __init__(self, parent, block):
+        CodeBlock.__init__(self, block, parent=parent)
         
 class PyBlock(CodeBlock):
-    def __init__(self, block):
-        CodeBlock.__init__(self,block)
+    def __init__(self, parent, block):
+        CodeBlock.__init__(self, block, parent=parent)
 
 class IfBlock(CodeBlock):
-    def __init__(self, cond, block):
+    def __init__(self, parent, cond, block):
         self._cond = cond
-        CodeBlock.__init__(self, block)
+        CodeBlock.__init__(self, block, parent=parent)
         self.parse_instructions()
         
-class Gate(CodeBlock):
+class Gate(Referencable, CodeBlock):
 
-    gates = {}
     internalGates = {}
 
-    def __init__(self, name, cargs, qargs, block, recursive = False, opaque = False):
+    def __init__(self, parent, name, cargs, qargs, block, recursive = False, opaque = False):
+        Referencable.__init__(self)
         self.name = name
-        if recursive:
-            Gate.gates[self.name] = "Temp"
-            self.entry = EntryExit(self.name)
         if opaque and len(block) == 0 : block.File = [';']
-        CodeBlock.__init__(self,block)
+        CodeBlock.__init__(self, block, parent=parent)
+        if recursive:
+            self.gate(name, cargs, qargs, NullBlock(block))
+            self._code = []
+            self.entry = EntryExit(self.name)
+        
         if qargs:
             for qarg in qargs.split(','):
                 self._qargs[qarg] = Argument(qarg, False)
 
-        if cargs:
+        if cargs and cargs:
             for carg in cargs.split(','):
                 self._cargs[carg] = Argument(carg, True)
 
         self._argNames = [arg.name for arg in list(self._qargs.values()) + list(self._cargs.values())]
         self.parse_instructions()
-        Gate.gates[self.name] = self
         if recursive and self.entry.depth > 0: self._error(noExitWarning.format(self.name))
         
     def new_variable(self, argument):
@@ -384,8 +515,9 @@ class Gate(CodeBlock):
         return qargs
 
 class Loop(CodeBlock):
-    def __init__(self, block, var, start, end, step = 1):
-        CodeBlock.__init__(self,block)
+    def __init__(self, parent, block, var, start, end, step = 1):
+        CodeBlock.__init__(self,block, parent=parent)
+        self._pargs += [var]
         self.depth = 1
         self.var = var
         self.start = start
@@ -404,3 +536,10 @@ class NestLoop(Loop):
         if step != 1: raise NotImplementedError('Non contiguous loops not currently permitted')
         self.step = step
                     
+class InitEnv:
+    # Initialise QuESTEnv
+    def __init__(self):
+        pass
+
+    def to_lang(self):
+        raise NotImplementedError(langWarning.format(type(self).__name__))

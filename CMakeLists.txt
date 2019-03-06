@@ -1,4 +1,4 @@
-# CMake initialisation.
+#1;5201;0c# CMake initialisation.
 cmake_minimum_required(VERSION 3.1)
 
 # Project name
@@ -23,7 +23,7 @@ endif()
 # -----------------------------------------------------------------------------
 
 # Create user executable
-add_executable(demo tutorial_example.c)
+add_executable(demo ripple_add.c)
 
 # Link libraries to user executable, including QuEST library
 target_link_libraries(demo QuEST m)

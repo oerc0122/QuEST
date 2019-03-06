@@ -2,7 +2,9 @@ from QASMParser.QASMTypes import *
 from QASMParser.QASMTokens import coreTokens
 
 def set_lang():
-    Variable.to_lang = Variable_to_c
+    ClassicalRegister.to_lang = ClassicalRegister_to_c
+    QuantumRegister.to_lang = QuantumRegister_to_c
+    Let.to_lang = Let_to_c
     Argument.to_lang = Argument_to_c
     CallGate.to_lang = CallGate_to_c
     Comment.to_lang = Comment_to_c
@@ -11,28 +13,47 @@ def set_lang():
     Gate.to_lang = CreateGate_to_c
     CBlock.to_lang = CBlock_to_c
     Loop.to_lang = Loop_to_c
+    NestLoop.to_lang = Loop_to_c
     Reset.to_lang = Reset_to_c
+    InitEnv.to_lang = init_env
 
-def Reset_to_c(self):
-    qarg = self._qargs[0]
-    qindex = self._qargs[1]
-    if not self._loops:
-        return f'collapseToOutcome({qarg.name}, {qindex}, 0);'
-    else:
-        if self._loops.end == qarg.size:
-            return f'initStateZero({qarg.name});'
-        else:
-            self.print_loops()
-    return ""
+# Several details pertaining to the language in question
+hoistFuncs = True   # Move functions to front of program
+hoistVars  = False  # Move variables to front of program
+bareCode   = False  # Can code be bare or does it need to be in function
+blockOpen = "{"     # Block delimiters
+blockClose = "}"    #  ""      ""
+indent = "  "       # Standard indent depth
+
+def include(filename):
+    return f'#include "{filename}"'
+
+def init_env(self):
+    return f'QuESTEnv Env = createQuESTEnv();'
+
+def Output_to_c(self):
+    carg = self._cargs[0]
+    bindex = self._cargs[1]
+    return f'printf("%d ", {carg}[{bindex}]);'
     
-def Variable_to_c(self):
-    if self.classical: return f'int[{self.size}] {self.name};'
-    else: return f"Qureg {self.name} = createQureg({self.size}, Env);"
+def Reset_to_c(self):
+    qarg = self._qargs
+    qargRef = self.resolve_arg(qarg)
+    return f'collapseToOutcome(qreg, {qargRef}, 0);'
+    
+def ClassicalRegister_to_c(self):
+    return f'int {self.name}[{self.size}];'
+
+def QuantumRegister_to_c(self):
+    return f"Qureg {self.name} = createQureg({self.size}, Env);"
 
 def Argument_to_c(self):
     if self.classical: return f'qreal {self.name}'
     else: return f'Qureg {self.name}, int {self.name}_index'
 
+def Let_to_c(self):
+    return f'const int {self.var} = {self.val};'
+    
 def CBlock_to_c(self):
     outStr = ""
     indent = "  "
@@ -44,7 +65,6 @@ def CBlock_to_c(self):
             instruction += nextLine()
             instruction += nextLine()
             instruction = instruction.strip(';')
-        instruction = re.sub('([{}]);','\g<1>',instruction)
         if coreTokens.closeBlock(instruction): depth-=1
         outStr += indent*depth + instruction+"\n"
         if coreTokens.openBlock(instruction): depth+=1
@@ -52,29 +72,21 @@ def CBlock_to_c(self):
     return outStr
     
 def CallGate_to_c(self):
-    if self.name in Gate.internalGates:
-        gateRef   = Gate.internalGates[self.name]
-        preString, printArgs = gateRef.reorder_args(self._qargs,self._cargs)
-        printGate = gateRef.internalName
-    else:
-        printArgs = ", ".join([f"{qarg[0].name}, {qarg[1]}" for qarg in self._qargs])
-        for carg in self._cargs:
+    printArgs = ""
+    if self._qargs:
+        printArgs += "qreg, "
+        printArgs += ", ".join([self.resolve_arg(qarg) for qarg in self._qargs])
+    for carg in self._cargs:
+        if printArgs:
             printArgs += ", "+carg
-        printGate = self.name
-        preString = []
-    
-    outString = ""
-    indent = "  "
-    depth = 0
-    
-    if self._loops:
-        for line in preString:
-            outString += indent*depth + line + ";\n"
-        outString += self.print_loops()
-    else:
-        for line in preString:
-            outString += indent*depth + line + ";\n"
-        outString += f"{indent*depth+printGate}({printArgs});"
+        else:
+            printArgs = carg
+    printGate = self.name
+    preString = []
+    outString = ""    
+    for line in preString:
+        outString += line + ";\n"
+    outString += f"{printGate}({printArgs});"
     return outString
 
 def Comment_to_c(self):
@@ -83,40 +95,24 @@ def Comment_to_c(self):
 def Measure_to_c(self):
     carg = self._cargs[0].name
     bindex = self._cargs[1]
-    qarg = self._qargs[0]
-    qindex = self._qargs[1]
-
-    mainString = f"{carg}[{bindex}] = measure({qarg.name}, {qindex})"
-    if self._loops:
-        return self.print_loops()
-    else:
-        return mainString
+    qarg = self._qargs
+    qargRef = self.resolve_arg(qarg)
+    return f"{carg}[{bindex}] = measure(qreg, {qargRef});"
 
 def IfBlock_to_c(self):
-    outStr = f"if ({self._cond})\n{{\n"
-    for line in self._code:
-        outStr += "  "+line.to_lang()
-    outStr += "}"
-    return outStr
+    return f"if ({self._cond})"
 
 def CreateGate_to_c(self):
-    printArgs = ", ".join([f"{qarg}, {qarg}_index" for qarg in self._qargs])
+    printArgs = ""
+    if self._qargs:
+        printArgs += "Qureg qreg"
+        printArgs += ", " + ", ".join([f"int {qarg}_index" for qarg in self._qargs])
     for carg in self._cargs:
-        printArgs += ", "+carg
-    outStr = f"void {self.name}({printArgs}) {{\n"
-    for line in self._code:
-        outStr += "  "+line.to_lang() +"\n"
-    outStr += "}"
+        if printArgs: printArgs += ", float "+carg
+        else: printArgs += "float "+carg
+    outStr = f"void {self.name}({printArgs})"
     return outStr
 
 def Loop_to_c(self):
-    forBlockOpen = "for (int {var} = {start}; {var} < {end}; {var} += {step})\n{{\n"
-    indent = "  "
-    forBlockClose = "}"
-    lineEnd = ";\n"
-        
-    outString = forBlockOpen.format(var = self.var, start = self.start, end = self.end, step = self.step)
-    for line in self._code:
-        outString += f"{indent}{line.to_lang()} \n"
-    outString += forBlockClose + "\n"
-    return outString
+    return  f"for (int {self.var} = {self.start}; {self.var} < {self.end}; {self.var} += {self.step})"
+

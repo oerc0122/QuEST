@@ -90,10 +90,12 @@ openQASM.add(Token('ifLine','if \((?P<cond>{cond})\)(?P<op> {op})?'.format(cond=
 
 OAQEQASM = TokenSet()
 
-OAQEQASM.add(Token('forLoop', 'for\s+(?P<var>{})\s+in\s+\[(?P<range>{})\] do'.format(coreTokens.validName, coreTokens.validRef)))
+OAQEQASM.add(Token('forLoop', 'for\s+(?P<var>{})\s+in\s+\[(?P<range>{})\]\s+do'.format(coreTokens.validName, coreTokens.validRef)))
 OAQEQASM.add(Token('CBlock', 'CBLOCK'))
 OAQEQASM.add(Token('PyBlock', 'PYBLOCK'))
 OAQEQASM.add(Token('createRGate', 'rgate\s+{}'.format(coreTokens.gate)))
 OAQEQASM.add(Token('exit', 'exit'))
+OAQEQASM.add(Token('let', 'let\s+(?P<var>{}) = (?P<val>{})'.format(coreTokens.validName, coreTokens.carg)))
+OAQEQASM.add(Token('output', 'output\s+{}'.format(coreTokens.namedParam)))
 
 OAQEQASM = OAQEQASM + openQASM
