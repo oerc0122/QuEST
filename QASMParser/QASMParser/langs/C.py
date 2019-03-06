@@ -31,10 +31,15 @@ def include(filename):
 def init_env(self):
     return f'QuESTEnv Env = createQuESTEnv();'
 
+def Output_to_c(self):
+    carg = self._cargs[0]
+    bindex = self._cargs[1]
+    return f'printf("%d ", {carg}[{bindex}]);'
+    
 def Reset_to_c(self):
-    qarg = self._qargs[0]
-    qindex = self._qargs[1]
-    return f'collapseToOutcome({qarg.name}, {qindex}, 0);'
+    qarg = self._qargs
+    qargRef = self.resolve_arg(qarg)
+    return f'collapseToOutcome(qreg, {qargRef}, 0);'
     
 def ClassicalRegister_to_c(self):
     return f'int {self.name}[{self.size}];'
@@ -47,7 +52,7 @@ def Argument_to_c(self):
     else: return f'Qureg {self.name}, int {self.name}_index'
 
 def Let_to_c(self):
-    return f'const int {self.var} = {self.val}'
+    return f'const int {self.var} = {self.val};'
     
 def CBlock_to_c(self):
     outStr = ""
@@ -60,7 +65,6 @@ def CBlock_to_c(self):
             instruction += nextLine()
             instruction += nextLine()
             instruction = instruction.strip(';')
-        instruction = re.sub('([{}]);','\g<1>',instruction)
         if coreTokens.closeBlock(instruction): depth-=1
         outStr += indent*depth + instruction+"\n"
         if coreTokens.openBlock(instruction): depth+=1
@@ -68,17 +72,17 @@ def CBlock_to_c(self):
     return outStr
     
 def CallGate_to_c(self):
-    if self.name in Gate.internalGates:
-        gateRef   = Gate.internalGates[self.name]
-        preString, printArgs = gateRef.reorder_args(self._qargs,self._cargs)
-        printGate = gateRef.internalName
-    else:
-        printArgs = ", ".join([f"{qarg[0].name}, {qarg[1]}" for qarg in self._qargs])
-        for carg in self._cargs:
+    printArgs = ""
+    if self._qargs:
+        printArgs += "qreg, "
+        printArgs += ", ".join([self.resolve_arg(qarg) for qarg in self._qargs])
+    for carg in self._cargs:
+        if printArgs:
             printArgs += ", "+carg
-        printGate = self.name
-        preString = []
-    
+        else:
+            printArgs = carg
+    printGate = self.name
+    preString = []
     outString = ""    
     for line in preString:
         outString += line + ";\n"
@@ -91,18 +95,21 @@ def Comment_to_c(self):
 def Measure_to_c(self):
     carg = self._cargs[0].name
     bindex = self._cargs[1]
-    qarg = self._qargs[0]
-    qindex = self._qargs[1]
-
-    return f"{carg}[{bindex}] = measure({qarg.name}, {qindex});"
+    qarg = self._qargs
+    qargRef = self.resolve_arg(qarg)
+    return f"{carg}[{bindex}] = measure(qreg, {qargRef});"
 
 def IfBlock_to_c(self):
     return f"if ({self._cond})"
 
 def CreateGate_to_c(self):
-    printArgs = ", ".join([f"Qureg {qarg}, int {qarg}_index" for qarg in self._qargs])
+    printArgs = ""
+    if self._qargs:
+        printArgs += "Qureg qreg"
+        printArgs += ", " + ", ".join([f"int {qarg}_index" for qarg in self._qargs])
     for carg in self._cargs:
-        printArgs += ", float "+carg
+        if printArgs: printArgs += ", float "+carg
+        else: printArgs += "float "+carg
     outStr = f"void {self.name}({printArgs})"
     return outStr
 

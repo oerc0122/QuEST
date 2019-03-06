@@ -100,6 +100,7 @@ class QASMBlock(QASMFile):
         self.name = parent.name
         self.version = parent.version
         self.File = block.splitlines()
+        self.orig = block
         self.nLine = startline
 
     def __len__(self):
@@ -113,6 +114,8 @@ class QASMBlock(QASMFile):
             if coreTokens.blank(line): continue
             return line
         else:
+            # Recallable
+            self.File = self.orig.splitlines()
             return None
 
     def __del__(self):

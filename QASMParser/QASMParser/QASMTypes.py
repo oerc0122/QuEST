@@ -3,7 +3,7 @@ from .QASMTokens import *
 from .FileHandle import QASMFile, QASMBlock, NullBlock
 import copy
 
-class VarHandler:
+class Operation:
     def __init__(self, qargs = None, cargs = None):
         self._loops = None
         self._qargs = qargs
@@ -28,7 +28,7 @@ class VarHandler:
             parg[1] = parg[1]
             if parg[1] is None:
                 parg[1] = parg[0].name + "_index"
-                self.add_loop(parg[1], 1, parg[0].size)
+                self.add_loop(parg[1], parg[0].start, parg[0].end)
                 
             elif isinstance(parg[1], str):
                 pargSplit = parg[1].split(':')
@@ -47,14 +47,20 @@ class VarHandler:
                     self.add_loop(parg[1], pargMin, pargMax)
                     
                 else: raise IOError('Bad Index syntax')
-                
-    def to_lang(self):
-        raise NotImplementedError(langWarning.format(type(self).__name__))
-                
-class Comment:
-    def __init__(self, comment):
-        self.name = comment
-        self.comment = comment
+
+    def resolve_arg(self, arg):
+        if type(arg[0]) is Argument:
+            return str(arg[1])
+        elif issubclass(type(arg[0]),Register):
+            if type(arg[1]) is str:
+                if arg[1].isdecimal():
+                    return str(arg[0].start + int(arg[1]))
+                else:
+                    return arg[1]
+            elif type(arg[1]) is int:
+                return str(arg[0].start + int(arg[1]))
+        else:
+            raise TypeError("Issue parsing arg")
 
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
@@ -63,6 +69,14 @@ class Referencable:
     def __init__(self):
         self.type_ = type(self).__name__
     
+class Comment:
+    def __init__(self, comment):
+        self.name = comment
+        self.comment = comment
+
+    def to_lang(self):
+        raise NotImplementedError(langWarning.format(type(self).__name__))
+
 class Constant(Referencable):
     def __init__(self, name, val):
         Referencable.__init__(self)
@@ -88,6 +102,7 @@ class QuantumRegister(Register):
     def __init__(self, name, size):
         Register.__init__(self, name, size)
         self.start = QuantumRegister.numQubits
+        self.end   = QuantumRegister.numQubits + self.size
         QuantumRegister.numQubits += self.size
 
 class ClassicalRegister(Register):
@@ -110,20 +125,24 @@ class Let:
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
 
-class CallGate(VarHandler):
+class CallGate(Operation):
     def __init__(self, gate, cargs, qargs):
         self.name = gate
-        VarHandler.__init__(self, qargs, cargs)
-        if cargs: self._cargs = cargs.split(',')
+        Operation.__init__(self, qargs, cargs)
+        if cargs:
+            if type(cargs) is str:
+                self._cargs = cargs.split(',')
+            elif type(cargs) is list:
+                self._cargs = cargs
         else: self._cargs = []
         self.handle_loops(self._qargs)
 
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
 
-class Measure(VarHandler):
+class Measure(Operation):
     def __init__(self, qarg, carg):
-        VarHandler.__init__(self, qarg, carg)
+        Operation.__init__(self, qarg, carg)
         self.handle_loops([self._qargs])
         carg = self._cargs[0]
         bindex = self._cargs[1]
@@ -138,11 +157,16 @@ class Measure(VarHandler):
             self._cargs[1] = self._qargs[1]
         self.finalise_loops()
         
-class Reset(VarHandler):
+class Reset(Operation):
     def __init__(self, qarg):
-        VarHandler.__init__(self, qarg)
+        Operation.__init__(self, qarg)
         self.handle_loops([self._qargs])
 
+class Output(Operation):
+    def __init__(self, carg):
+        Operation.__init__(self, carg)
+        self.handle_loops([self._cargs])
+        
 class EntryExit:
     def __init__(self, parent):
         self.parent = parent
@@ -211,7 +235,20 @@ class CodeBlock:
         self._is_def(funcName, create=False, type_ = 'Gate')
         
         qargs = self.parse_qarg_string(qargs)
-        gate = CallGate(funcName, cargs, qargs)
+        if funcName in Gate.internalGates:
+            gateRef = Gate.internalGates[funcName]
+            gate = CallGate(gateRef.internalName, cargs, qargs)
+            preString, outCargs = gateRef.reorder_args(gate._qargs,gate._cargs)
+            gate._qargs = []
+            gate._cargs = outCargs
+            if preString:
+                preString = "\n".join(preString)
+                preString = QASMBlock(self.currentFile, self.currentFile.nLine, preString)
+                self.cBlock(preString)
+            gate.finalise_loops()
+        else:
+            gate = CallGate(funcName, cargs, qargs)
+            
         self._code += [gate]
 
     def measurement(self, qarg, qindex, carg, bindex):
@@ -251,6 +288,19 @@ class CodeBlock:
         
         self._code += [reset]
 
+    def output(self, carg, bindex):
+        if carg not in self._cargs : self._error(existWarning.format(Type = 'Qreg', Name = carg))
+        else : carg = self._cargs[carg]
+        if bindex:
+            bindex = int(bindex)
+            if bindex > carg.size - 1 or bindex < 0 :
+                self._error(indexWarning.format(Var=carg,Req=bindex,Max=carg.size))
+
+        output = Output ( [carg, bindex] )
+        
+        self._code += [output]
+
+    
     def loop(self, var, block, start, end):
         loop = Loop(block, var, start, end)
         self._code += [loop]
@@ -369,6 +419,10 @@ class CodeBlock:
             self.let(var, val)
         elif token.name == "exit":
             self.leave()
+        elif token.name == "output":
+            carg = match.group('cargName')
+            bindex = match.group('bitIndex')
+            self.output(carg, bindex)
         else:
             self._error(instructionWarning.format(line.lstrip().split()[0], self.currentFile.QASMType))
         self._code[-1].original = line
@@ -413,11 +467,11 @@ class CodeBlock:
 
 class CBlock(CodeBlock):
     def __init__(self, parent, block):
-        CodeBlock.__init__(self,block, parent=parent)
+        CodeBlock.__init__(self, block, parent=parent)
         
 class PyBlock(CodeBlock):
     def __init__(self, parent, block):
-        CodeBlock.__init__(self,block, parent=parent)
+        CodeBlock.__init__(self, block, parent=parent)
 
 class IfBlock(CodeBlock):
     def __init__(self, parent, cond, block):
@@ -427,7 +481,6 @@ class IfBlock(CodeBlock):
         
 class Gate(Referencable, CodeBlock):
 
-    gates = {}
     internalGates = {}
 
     def __init__(self, parent, name, cargs, qargs, block, recursive = False, opaque = False):
@@ -444,13 +497,12 @@ class Gate(Referencable, CodeBlock):
             for qarg in qargs.split(','):
                 self._qargs[qarg] = Argument(qarg, False)
 
-        if cargs:
+        if cargs and cargs:
             for carg in cargs.split(','):
                 self._cargs[carg] = Argument(carg, True)
 
         self._argNames = [arg.name for arg in list(self._qargs.values()) + list(self._cargs.values())]
         self.parse_instructions()
-        Gate.gates[self.name] = self
         if recursive and self.entry.depth > 0: self._error(noExitWarning.format(self.name))
         
     def new_variable(self, argument):

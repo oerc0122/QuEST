@@ -73,8 +73,11 @@ class ProgFile(CodeBlock):
             temp = Gate(self, funcName, "", "", NullBlock(self.currentFile))
             temp._code = [InitEnv()]
             # Hoist qregs
+            regs = [ x for x in codeToWrite if type(x).__name__ == "QuantumRegister" ]
+            for reg in regs:
+                temp._code += [Comment(f'{reg.name}[{reg.start}:{reg.end-1}]')]
             codeToWrite = [ x for x in codeToWrite if type(x).__name__ != "QuantumRegister" ]
-            temp._code += [QuantumRegister("register", QuantumRegister.numQubits)]
+            temp._code += [QuantumRegister("qreg", QuantumRegister.numQubits)]
             temp._code += codeToWrite
             codeToWrite = [temp]
         print_code(self, codeToWrite, outputFile)
