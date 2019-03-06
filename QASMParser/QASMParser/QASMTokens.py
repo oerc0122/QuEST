@@ -97,5 +97,6 @@ OAQEQASM.add(Token('createRGate', 'rgate\s+{}'.format(coreTokens.gate)))
 OAQEQASM.add(Token('exit', 'exit'))
 OAQEQASM.add(Token('let', 'let\s+(?P<var>{}) = (?P<val>{})'.format(coreTokens.validName, coreTokens.carg)))
 OAQEQASM.add(Token('output', 'output\s+{}'.format(coreTokens.namedParam)))
+OAQEQASM.add(Token('alias','alias\s+(?P<alias>{}) -> {}'.format(coreTokens.validName, coreTokens.namedQubit)))
 
 OAQEQASM = OAQEQASM + openQASM

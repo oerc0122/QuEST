@@ -32,8 +32,7 @@ def init_env(self):
     return f'QuESTEnv Env = createQuESTEnv();'
 
 def Output_to_c(self):
-    carg = self._cargs[0]
-    bindex = self._cargs[1]
+    carg, bindex = self._cargs
     return f'printf("%d ", {carg}[{bindex}]);'
     
 def Reset_to_c(self):
@@ -93,11 +92,10 @@ def Comment_to_c(self):
     return "//" + self.comment
 
 def Measure_to_c(self):
-    carg = self._cargs[0].name
-    bindex = self._cargs[1]
+    carg, bindex = self._cargs
     qarg = self._qargs
     qargRef = self.resolve_arg(qarg)
-    return f"{carg}[{bindex}] = measure(qreg, {qargRef});"
+    return f"{carg.name}[{bindex}] = measure(qreg, {qargRef});"
 
 def IfBlock_to_c(self):
     return f"if ({self._cond})"
