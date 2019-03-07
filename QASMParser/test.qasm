@@ -12,6 +12,12 @@ gate majority a,b,c
 opaque magic a {
 }
 
+opaque rotateytate a {
+  rotateX(qreg, a_index, 13.);
+  rotateZ(qreg, a_index, 15.1);
+  rotateY(qreg, a_index, 91.);
+}
+
 gate unmaj(i) a,b,c 
 {
   let j = i - 1;

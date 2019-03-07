@@ -58,21 +58,7 @@ def Let_to_c(self):
     return f'const int {self.var} = {self.val};'
     
 def CBlock_to_c(self):
-    outStr = ""
-    indent = "  "
-    depth = 0
-    nextLine = self.currentFile.readline
-    instruction = nextLine()
-    while instruction:
-        if instruction.startswith('for'):
-            instruction += nextLine()
-            instruction += nextLine()
-            instruction = instruction.strip(';')
-        if coreTokens.closeBlock(instruction): depth-=1
-        outStr += indent*depth + instruction+"\n"
-        if coreTokens.openBlock(instruction): depth+=1
-        instruction = nextLine()
-    return outStr
+    return ""
     
 def CallGate_to_c(self):
     printArgs = ""
@@ -123,22 +109,7 @@ def Opaque_to_c(self):
     for carg in self._cargs:
         if printArgs: printArgs += ", float "+carg
         else: printArgs += "float "+carg
-    outStr = f"void {self.name}({printArgs}) {{\n"
-    indent = "  "
-    depth = 0
-    nextLine = self.currentFile.readline
-    instruction = nextLine()
-    while instruction:
-        if instruction.startswith('for'):
-            instruction += nextLine()
-            instruction += nextLine()
-            instruction = instruction.strip(';')
-        if coreTokens.closeBlock(instruction): depth-=1
-        outStr += indent*depth + instruction+"\n"
-        if coreTokens.openBlock(instruction): depth+=1
-        instruction = nextLine()
-    outStr += "}"
-
+    outStr = f"void {self.name}({printArgs})"
     return outStr
 
 def Loop_to_c(self):

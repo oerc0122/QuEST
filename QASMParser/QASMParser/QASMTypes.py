@@ -72,7 +72,14 @@ class Operation:
 class Referencable:
     def __init__(self):
         self.type_ = type(self).__name__
-    
+
+class Verbatim:
+    def __init__(self, line):
+        self.line = str(line)
+
+    def to_lang(self):
+        return self.line
+        
 class Comment:
     def __init__(self, comment):
         self.name = comment
@@ -483,6 +490,20 @@ class CodeBlock:
             self._error(eofWarning.format(f'parsing block {blockName}'))
         return QASMBlock(self.currentFile, startline, block)
 
+    def parse_verbatim(self, block):
+        indent = "  "
+        depth = 0
+        instruction = block.readline()
+        while instruction:
+            if instruction.startswith('for'):
+                instruction += block.readline()
+                instruction += block.readline()
+                instruction = instruction.strip(';')
+            if coreTokens.closeBlock(instruction): depth-=1
+            self._code += [Verbatim(indent*depth + instruction)]
+            if coreTokens.openBlock(instruction): depth+=1
+            instruction = block.readline()
+    
     def parse_range(self, rangeSpec, arg = None):
         if ":" not in rangeSpec:
             return rangeSpec, rangeSpec
@@ -509,10 +530,13 @@ class CodeBlock:
 class CBlock(CodeBlock):
     def __init__(self, parent, block):
         CodeBlock.__init__(self, block, parent=parent)
+        self.parse_verbatim(block)
+
         
 class PyBlock(CodeBlock):
     def __init__(self, parent, block):
         CodeBlock.__init__(self, block, parent=parent)
+        self.parse_verbatim(block)
 
 class IfBlock(CodeBlock):
     def __init__(self, parent, cond, block):
@@ -565,6 +589,7 @@ class Opaque(Gate):
             self._error(opaqueWarning.format(block.QASMType.title()))
             
         CodeBlock.__init__(self, block, parent=parent)
+        self.parse_verbatim(block)
 
         if qargs:
             for qarg in qargs.split(','):

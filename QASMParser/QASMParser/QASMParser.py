@@ -23,7 +23,7 @@ class ProgFile(CodeBlock):
             raise NotImplementedError(langNotDefWarning.format(lang))
 
         indent = lang.indent
-        writeln = lambda toWrite: outputFile.write(self.depth*indent + toWrite + "\n")
+        writeln = lambda writeIn: [outputFile.write(self.depth*indent + toWrite + "\n" ) for toWrite in writeIn.splitlines()]
 
         def print_code(self, code, outputFile):
             self.depth += 1
@@ -37,7 +37,7 @@ class ProgFile(CodeBlock):
                     print_code(self,line._loops._code,outputFile)
                     writeln(lang.blockClose)
                 # Print children
-                elif hasattr(line,"_code") and type(line) not in [CBlock, PyBlock]:
+                elif hasattr(line,"_code"):
                     writeln(line.to_lang() + lang.blockOpen)
                     print_code(self,line._code,outputFile)
                     writeln(lang.blockClose)
@@ -69,8 +69,8 @@ class ProgFile(CodeBlock):
                 elif type(lang.header) is str:
                     writeln(lang.header)
             if lang.hoistFuncs:
-               codeToWrite = sorted(self._code, key = lambda x: type(x).__name__ == "Gate")
-               while type(codeToWrite[-1]) is Gate:
+               codeToWrite = sorted(self._code, key = lambda x: issubclass(type(x), Gate) )
+               while issubclass(type(codeToWrite[-1]), Gate):
                    gate = [codeToWrite.pop()]
                    print_code(self, gate, outputFile)
                
