@@ -12,19 +12,17 @@ gate majority a,b,c
 opaque magic a {
 }
 
-rgate unmaj(i) a,b,c 
+gate unmaj(i) a,b,c 
 {
   let j = i - 1;
   ccx a,b,c; 
   cx c,a; 
   cx a,b;
-  unmaj(j) a,a,a;
-  exit;
 }
 
 CBLOCK
 {
-  printf('%s', "Hello!");
+  printf("%s \n", "Hello!");
   int A = 3;
   float C = 0.6;
   for (int i = 1; i < 3; i++) {
@@ -81,5 +79,7 @@ alias q -> a[1:2];
 x q;
 
 for Q in [1:3] do {
-    U(1,1,1) a[Q]
+    U(1,1,1) a[Q];
 }
+
+output ans;
