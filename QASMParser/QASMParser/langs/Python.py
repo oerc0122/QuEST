@@ -1,108 +1,108 @@
 from QASMParser.QASMTypes import *
 
 def set_lang():
-    Variable.to_lang = Variable_to_python
-    Argument.to_lang = Argument_to_python
-    CallGate.to_lang = CallGate_to_python
-    Comment.to_lang = Comment_to_python
-    Measure.to_lang = Measure_to_python
-    IfBlock.to_lang = IfBlock_to_python
-    Gate.to_lang = CreateGate_to_python
-    PyBlock.to_lang = PyBlock_to_python
-    Loop.to_lang = Loop_to_python
-    CBlock.to_lang = CBlock_to_python
-    Reset.to_lang = Reset_to_python
+    ClassicalRegister.to_lang = ClassicalRegister_to_Python
+    QuantumRegister.to_lang = QuantumRegister_to_Python
+    Let.to_lang = Let_to_Python
+    Argument.to_lang = Argument_to_Python
+    CallGate.to_lang = CallGate_to_Python
+    Comment.to_lang = Comment_to_Python
+    Measure.to_lang = Measure_to_Python
+    IfBlock.to_lang = IfBlock_to_Python
+    Gate.to_lang = CreateGate_to_Python
+    Opaque.to_lang = CreateGate_to_Python
+    CBlock.to_lang = PyBlock_to_Python
+    PyBlock.to_lang = PyBlock_to_Python
+    Loop.to_lang = Loop_to_Python
+    NestLoop.to_lang = Loop_to_Python
+    Reset.to_lang = Reset_to_Python
+    Output.to_lang = Output_to_Python
+    InitEnv.to_lang = init_env
     
-def Reset_to_python(self):
-    qarg = self._qargs[0]
-    qindex = self._qargs[1]
-    if not self._loops:
-        return f'collapseToOutcome({qarg.name}, {qindex}, 0);'
-    else:
-        if self._loops.end == qarg.size:
-            return f'initStateZero({qarg.name});'
-        else:
-            self.print_loops()
 
-def Comment_to_python(self):
-    return "#" + self.comment
+# Several details pertaining to the language in question
+hoistFuncs = False   # Move functions to front of program
+hoistVars  = False  # Move variables to front of program
+bareCode   = False  # Can code be bare or does it need to be in function
+blockOpen = ":"     # Block delimiters
+blockClose = ""    #  ""      ""
+indent = "    "       # Standard indent depth
 
-def Variable_to_python(self):
-    if self.classical: return f'{self.name} = [0]*{self.size}'
-    else: return f'{self.name} = createQureg({self.size}, Env)'
+def Python_include(filename):
+    return f'from {filename} import *'
+header = [Python_include("QuESTLibs")]
 
-def Argument_to_python(self):
+def init_env(self):
+    return f'Env = createQuESTEnv()'
+
+def Output_to_Python(self):
+    carg, bindex = self._cargs
+    return f'print({carg.name}[{bindex}])'
+
+def Reset_to_Python(self):
+    qarg = self._qargs
+    qargRef = self.resolve_arg(qarg)
+    return f'collapseToOutcome(qreg, {qargRef}, 0)'
+    
+def ClassicalRegister_to_Python(self):
+    return f'{self.name} = [0]*{self.size}'
+
+def QuantumRegister_to_Python(self):
+    return f"{self.name} = createQureg({self.size}, Env)"
+
+def Argument_to_Python(self):
     if self.classical: return f'{self.name}'
     else: return f'{self.name}, {self.name}_index'
 
-def PyBlock_to_python(self):
-    raise NotImplementedError('Cannot have python blocks yet')
-
-def CallGate_to_python(self):
-    if self.name in Gate.internalGates:
-        gateRef   = Gate.internalGates[self.name]
-        preString, printArgs = gateRef.reorder_args(self._qargs,self._cargs)
-        printGate = gateRef.internalName
-    else:
-        printArgs = ", ".join([f"{qarg[0].name}, {qarg[1]}" for qarg in self._qargs])
-        for carg in self._cargs:
-            printArgs += ", "+carg
-        printGate = self.name
-        preString = []
+def Let_to_Python(self):
+    return f'{self.var} = {self.val}'
     
-    outString = ""
-    indent = "  "
-    depth = 0
+def PyBlock_to_Python(self):
+    return "if True"
     
-    if self._loops:
-        for line in preString:
-            outString += indent*depth + line + "\n"
-        outString += self.print_loops()
-    else:
-        for line in preString:
-            outString += indent*depth + line + "\n"
-        outString += f"{indent*depth+printGate}({printArgs})"
-    return outString
-
-def CBlock_to_python(self):
-    print("Warning cBlock will not be parsed")
-    return ""
-
-def Measure_to_python(self):
-    carg = self._cargs[0].name
-    bindex = self._cargs[1]
-    qarg = self._qargs[0]
-    qindex = self._qargs[1]
-
-    mainString = f"{carg}[{bindex}] = measure({qarg.name}, {qindex})"
-    if self._loops:
-        return self.print_loops()
-    else:
-        return mainString
-
-def IfBlock_to_python(self):
-    outStr = f"if ({self._cond}):"
-    for line in self._code:
-        outStr += "    "+line.to_lang()
-    return outStr
-
-def CreateGate_to_python(self):
-    printArgs = ", ".join([f"{qarg}, {qarg}_index" for qarg in self._qargs])
+def CallGate_to_Python(self):
+    printArgs = ""
+    if self._qargs:
+        printArgs += "qreg, "
+        printArgs += ", ".join([self.resolve_arg(qarg) for qarg in self._qargs])
     for carg in self._cargs:
-        printArgs += ", "+carg
-    outStr = f"def {self.name}({printArgs}) :\n"
-    for line in self._code:
-        outStr += "    "+line.to_lang() +"\n"
+        if printArgs:
+            printArgs += ", "+carg
+        else:
+            printArgs = carg
+    printGate = self.name
+    preString = []
+    outString = ""    
+    for line in preString:
+        outString += line + ";\n"
+    outString += f"{printGate}({printArgs})"
+    return outString
+
+def Comment_to_Python(self):
+    return "#" + self.comment
+
+def Measure_to_Python(self):
+    carg, bindex = self._cargs
+    qarg = self._qargs
+    qargRef = self.resolve_arg(qarg)
+    return f"{carg.name}[{bindex}] = measure(qreg, {qargRef})"
+
+def IfBlock_to_Python(self):
+    return f"if ({self._cond})"
+
+def CreateGate_to_Python(self):
+    if type(self._code[0]) is Verbatim and self._code[0].line == ";": self._code = [Verbatim("pass")]
+    printArgs = ""
+    if self._qargs:
+        printArgs += "qreg"
+        printArgs += ", " + ", ".join([f"{qarg}_index" for qarg in self._qargs])
+    for carg in self._cargs:
+        if printArgs: printArgs += ", "+carg
+        else: printArgs += carg
+    outStr = f"def {self.name}({printArgs})"
     return outStr
 
-def Loop_to_python(self):
-    forBlockOpen = "for {var} in range({start},{end},{step}):\n"
-    indent = "    "
-    forBlockClose = ""
-    lineEnd = "\n"
-        
-    outString = forBlockOpen.format(var = self.var, start = self.start, end = self.end, step = self.step)
-    for line in self._code:
-        outString += f"{indent}{line.to_lang()} \n"
-    outString += forBlockClose + "\n"
-    return outString
+def Loop_to_Python(self):
+    return  f"for {self.var} in range({self.start}, {self.end}, {self.step})"
+
+

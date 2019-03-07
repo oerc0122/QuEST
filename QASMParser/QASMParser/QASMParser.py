@@ -54,7 +54,7 @@ class ProgFile(CodeBlock):
         self.depth = -1
        
         for line in self.currentFile.header:
-            writeln(line)
+            writeln(Comment(line).to_lang())
 
         # If our language needs to add things to the header
         if module:

@@ -10,7 +10,7 @@ def set_lang():
     Measure.to_lang = Measure_to_c
     IfBlock.to_lang = IfBlock_to_c
     Gate.to_lang = CreateGate_to_c
-    Opaque.to_lang = Opaque_to_c
+    Opaque.to_lang = CreateGate_to_c
     CBlock.to_lang = CBlock_to_c
     Loop.to_lang = Loop_to_c
     NestLoop.to_lang = Loop_to_c
@@ -97,18 +97,7 @@ def CreateGate_to_c(self):
     for carg in self._cargs:
         if printArgs: printArgs += ", float "+carg
         else: printArgs += "float "+carg
-    outStr = f"void {self.name}({printArgs})"
-    return outStr
-
-def Opaque_to_c(self):
-    printArgs = ""
-    if self._qargs:
-        printArgs += "Qureg qreg"
-        printArgs += ", " + ", ".join([f"int {qarg}_index" for qarg in self._qargs])
-    for carg in self._cargs:
-        if printArgs: printArgs += ", float "+carg
-        else: printArgs += "float "+carg
-    outStr = f"void {self.name}({printArgs})"
+    outStr = f"void {self.name}({printArgs}) "
     return outStr
 
 def Loop_to_c(self):

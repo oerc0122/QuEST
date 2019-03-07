@@ -23,7 +23,7 @@ class QASMFile:
             line=self.readline()
             while line is not None:
                 if openQASM.wholeLineComment(line):
-                    self.header += [line]
+                    self.header += [line.lstrip('/')]
                 elif openQASM.version(line):
                     self.version = openQASM.version(line).group('version','minorVer','majorVer')
                     self.QASMType, self.majorVer, self.minorVer = self.version
