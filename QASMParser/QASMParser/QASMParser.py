@@ -55,8 +55,14 @@ class ProgFile(CodeBlock):
        
         for line in self.currentFile.header:
             writeln(line)
-        if hasattr(lang,'include'):
-            writeln(lang.include('QuEST.h'))
+
+        # If our language needs to add things to the header
+        if hasattr(lang,'header'):
+            if type(lang.header) is list:
+                for line in lang.header:
+                    writeln(line)
+            elif type(lang.header) is str:
+                writeln(lang.header)
             
         if lang.hoistFuncs:
             codeToWrite = sorted(self._code, key = lambda x: type(x).__name__ == "Gate")

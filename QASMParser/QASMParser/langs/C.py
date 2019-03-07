@@ -25,8 +25,10 @@ blockOpen = "{"     # Block delimiters
 blockClose = "}"    #  ""      ""
 indent = "  "       # Standard indent depth
 
-def include(filename):
+
+def c_include(filename):
     return f'#include "{filename}"'
+header = [c_include("QuEST.h"), c_include("stdio.h")]
 
 def init_env(self):
     return f'QuESTEnv Env = createQuESTEnv();'
