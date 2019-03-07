@@ -57,24 +57,23 @@ class ProgFile(CodeBlock):
             writeln(line)
 
         # If our language needs to add things to the header
-        if hasattr(lang,'header'):
-            if type(lang.header) is list:
-                for line in lang.header:
-                    writeln(line)
-            elif type(lang.header) is str:
-                writeln(lang.header)
-            
-        if lang.hoistFuncs:
-            codeToWrite = sorted(self._code, key = lambda x: type(x).__name__ == "Gate")
-            while type(codeToWrite[-1]) is Gate:
-                gate = [codeToWrite.pop()]
-                print_code(self, gate, outputFile)
         if module:
             if filename: funcName = os.path.splitext(os.path.basename(filename))[0]
             else:        funcName = "module"
         else:
             funcName = "main"
-            
+            if hasattr(lang,'header'):
+                if type(lang.header) is list:
+                    for line in lang.header:
+                        writeln(line)
+                elif type(lang.header) is str:
+                    writeln(lang.header)
+            if lang.hoistFuncs:
+               codeToWrite = sorted(self._code, key = lambda x: type(x).__name__ == "Gate")
+               while type(codeToWrite[-1]) is Gate:
+                   gate = [codeToWrite.pop()]
+                   print_code(self, gate, outputFile)
+               
         if not lang.bareCode:
             temp = Gate(self, funcName, "", "", NullBlock(self.currentFile))
             temp._code = [InitEnv()]
@@ -112,5 +111,6 @@ class ProgFile(CodeBlock):
                     )
                 else:
                     self._objs[obj] = other._objs[obj]
+                    self._objs[obj].included = True
         else:
             raise TypeError(f'Cannot combine {type(self).__name__} with {type(other).__name__}')

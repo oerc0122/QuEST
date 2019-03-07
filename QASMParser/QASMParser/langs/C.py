@@ -11,10 +11,12 @@ def set_lang():
     Measure.to_lang = Measure_to_c
     IfBlock.to_lang = IfBlock_to_c
     Gate.to_lang = CreateGate_to_c
+    Opaque.to_lang = Opaque_to_c
     CBlock.to_lang = CBlock_to_c
     Loop.to_lang = Loop_to_c
     NestLoop.to_lang = Loop_to_c
     Reset.to_lang = Reset_to_c
+    Output.to_lang = Output_to_c
     InitEnv.to_lang = init_env
 
 # Several details pertaining to the language in question
@@ -35,7 +37,7 @@ def init_env(self):
 
 def Output_to_c(self):
     carg, bindex = self._cargs
-    return f'printf("%d ", {carg}[{bindex}]);'
+    return f'printf("%d ", {carg.name}[{bindex}]);'
     
 def Reset_to_c(self):
     qarg = self._qargs
@@ -111,6 +113,32 @@ def CreateGate_to_c(self):
         if printArgs: printArgs += ", float "+carg
         else: printArgs += "float "+carg
     outStr = f"void {self.name}({printArgs})"
+    return outStr
+
+def Opaque_to_c(self):
+    printArgs = ""
+    if self._qargs:
+        printArgs += "Qureg qreg"
+        printArgs += ", " + ", ".join([f"int {qarg}_index" for qarg in self._qargs])
+    for carg in self._cargs:
+        if printArgs: printArgs += ", float "+carg
+        else: printArgs += "float "+carg
+    outStr = f"void {self.name}({printArgs}) {{\n"
+    indent = "  "
+    depth = 0
+    nextLine = self.currentFile.readline
+    instruction = nextLine()
+    while instruction:
+        if instruction.startswith('for'):
+            instruction += nextLine()
+            instruction += nextLine()
+            instruction = instruction.strip(';')
+        if coreTokens.closeBlock(instruction): depth-=1
+        outStr += indent*depth + instruction+"\n"
+        if coreTokens.openBlock(instruction): depth+=1
+        instruction = nextLine()
+    outStr += "}"
+
     return outStr
 
 def Loop_to_c(self):

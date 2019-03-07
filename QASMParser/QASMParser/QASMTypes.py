@@ -110,8 +110,11 @@ class QuantumRegister(Register):
         QuantumRegister.numQubits += self.size
 
 class ClassicalRegister(Register):
-    pass
-
+    def __init__(self, name, size):
+        Register.__init__(self, name, size)
+        self.start = 0
+        self.end = self.size
+    
 class Alias(Register):
     def __init__(self, name, referee, start, end):
         size = end - start + 1
@@ -176,7 +179,7 @@ class Reset(Operation):
 
 class Output(Operation):
     def __init__(self, carg):
-        Operation.__init__(self, carg)
+        Operation.__init__(self, cargs = carg)
         self.handle_loops([self._cargs])
         
 class EntryExit:
@@ -239,7 +242,11 @@ class CodeBlock:
     def gate(self, funcName, cargs, qargs, block, recursive = False, opaque = False):
         self._is_def(funcName, create=True)
 
-        gate = Gate(self, funcName, cargs, qargs, block, recursive, opaque)
+        if not opaque:
+            gate = Gate(self, funcName, cargs, qargs, block, recursive)
+        else:
+            gate = Opaque(self, funcName, cargs, qargs, block)
+            
         self._objs[gate.name] = gate
         self._code += [gate]
 
@@ -517,11 +524,11 @@ class Gate(Referencable, CodeBlock):
 
     internalGates = {}
 
-    def __init__(self, parent, name, cargs, qargs, block, recursive = False, opaque = False):
+    def __init__(self, parent, name, cargs, qargs, block, recursive = False):
         Referencable.__init__(self)
         self.name = name
-        if opaque and len(block) == 0 : block.File = [';']
         CodeBlock.__init__(self, block, parent=parent)
+
         if recursive:
             self.gate(name, cargs, qargs, NullBlock(block))
             self._code = []
@@ -531,11 +538,10 @@ class Gate(Referencable, CodeBlock):
             for qarg in qargs.split(','):
                 self._qargs[qarg] = Argument(qarg, False)
 
-        if cargs and cargs:
+        if cargs:
             for carg in cargs.split(','):
                 self._cargs[carg] = Argument(carg, True)
 
-        self._argNames = [arg.name for arg in list(self._qargs.values()) + list(self._cargs.values())]
         self.parse_instructions()
         if recursive and self.entry.depth > 0: self._error(noExitWarning.format(self.name))
         
@@ -548,6 +554,27 @@ class Gate(Referencable, CodeBlock):
         qargs = [[self._qargs[arg[0]], arg[0]+"_index"] for arg in qargs]
         return qargs
 
+class Opaque(Gate):
+    def __init__(self, parent, name, cargs, qargs, block):
+
+        self.type_ = "Gate"
+        
+        self.name = name
+        if len(block) == 0: block.File = [';']
+        if block.QASMType != "OAQEQASM" and block.File != ";":
+            self._error(opaqueWarning.format(block.QASMType.title()))
+            
+        CodeBlock.__init__(self, block, parent=parent)
+
+        if qargs:
+            for qarg in qargs.split(','):
+                self._qargs[qarg] = Argument(qarg, False)
+
+        if cargs:
+            for carg in cargs.split(','):
+                self._cargs[carg] = Argument(carg, True)
+ 
+    
 class Loop(CodeBlock):
     def __init__(self, parent, block, var, start, end, step = 1):
         CodeBlock.__init__(self,block, parent=parent)
