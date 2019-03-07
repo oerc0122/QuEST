@@ -1,5 +1,4 @@
 from QASMParser.QASMTypes import *
-from QASMParser.QASMTokens import coreTokens
 
 def set_lang():
     ClassicalRegister.to_lang = ClassicalRegister_to_c
