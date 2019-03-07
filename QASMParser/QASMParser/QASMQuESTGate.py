@@ -27,30 +27,38 @@ class QuESTLibGate(Gate):
         preString = []
         args = []
         outCargs = []
-        rest = []
         for expect in self.argOrder:
             if expect == "nextQureg":
                 args.append('qreg')
-                qarg = qargs.pop(0)
+                # qarg = qargs.pop(0)
                 # args.append(qarg[0].name)
-            elif expect == "index":
-                args.append(Operation.resolve_arg(self,qarg))
             elif expect == "nextIndex":
                 qarg = qargs.pop(0)
                 args.append(Operation.resolve_arg(self,qarg))
-        if "mConRestIndex" in self.argOrder:
-            for qarg in qargs:
-                rest += [qarg[1]]
+            elif expect[0:6] == "nIndex":
+                nArgs = expect[6:]
+                if not nArgs.isdecimal() :
+                    if nArgs != "*":
+                        raise TypeError('Expected number of indices')
+                    else:
+                        nArgs = len(qargs)
+                nArgs = int(nArgs)
+                tmp = []
+                for i in range(nArgs):
+                    qarg = qargs.pop(0)
+                    tmp.append(Operation.resolve_arg(self,qarg))
+                args.append(tmp)
         nTemp = 0
         for arg in self.argOrder:
             if arg == "nextQureg" or arg == "nextIndex" or arg == "index":
                 outCargs += [args.pop(0)]
-            elif arg == "mConRestIndex":
+            elif arg[0:6] == "nIndex":
+                indices = args.pop(0)
                 nTemp+=1
                 tempVar = "tmp"+str(nTemp)
-                nRest     = len(rest)
-                preString += [f"int {tempVar}[{nRest}] = {{"+",".join(rest)+"};"]
-                outCargs += [f"(int*) {tempVar}",f"{nRest}"]
+                nIndices     = len(indices)
+                preString += [f"int {tempVar}[{nIndices}] = {{"+",".join(indices)+"};"]
+                outCargs += [f"(int*) {tempVar}",f"{nIndices}"]
             elif arg == "nextCarg":
                 outCargs += [cargs.pop(0)]
             elif arg == "cargs":
@@ -81,9 +89,9 @@ class QuESTLibGate(Gate):
                 outCargs += [tempVar]
         return preString, outCargs
 
-QuESTLibGate(name = "x",   cargs = None, qargs = "a", argOrder = ("nextQureg", "index"), internalName = "pauliX")
-QuESTLibGate(name = "cx",  cargs = None, qargs = "a", argOrder = ("nextQureg", "index", "nextIndex"), internalName = "controlledNot")
-QuESTLibGate(name = "ccx", cargs = None, qargs = "a,b,c", argOrder = ("nextQureg", "mConRestIndex", "index", "not"), internalName = "multiControlledUnitary")
-QuESTLibGate(name = "rotateX", cargs = "phi", qargs = "a", argOrder = ("nextQureg", "index", "cargs"), internalName = "rotateX")
-QuESTLibGate(name = "rotateY", cargs = "theta", qargs = "a", argOrder = ("nextQureg", "index", "cargs"), internalName = "rotateY")
-QuESTLibGate(name = "rotateZ", cargs = "lambda", qargs = "a", argOrder = ("nextQureg", "index", "cargs"), internalName = "rotateZ")
+QuESTLibGate(name = "x",   cargs = None, qargs = "a", argOrder = ("nextQureg", "nextIndex"), internalName = "pauliX")
+QuESTLibGate(name = "cx",  cargs = None, qargs = "a", argOrder = ("nextQureg", "nextIndex", "nextIndex"), internalName = "controlledNot")
+QuESTLibGate(name = "ccx", cargs = None, qargs = "a,b,c", argOrder = ("nextQureg", "nIndex2", "nextIndex", "not"), internalName = "multiControlledUnitary")
+QuESTLibGate(name = "rotateX", cargs = "phi", qargs = "a", argOrder = ("nextQureg", "nextIndex", "cargs"), internalName = "rotateX")
+QuESTLibGate(name = "rotateY", cargs = "theta", qargs = "a", argOrder = ("nextQureg", "nextIndex", "cargs"), internalName = "rotateY")
+QuESTLibGate(name = "rotateZ", cargs = "lambda", qargs = "a", argOrder = ("nextQureg", "nextIndex", "cargs"), internalName = "rotateZ")
