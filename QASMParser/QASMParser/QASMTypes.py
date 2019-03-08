@@ -73,13 +73,6 @@ class Referencable:
     def __init__(self):
         self.type_ = type(self).__name__
 
-class Verbatim:
-    def __init__(self, line):
-        self.line = str(line)
-
-    def to_lang(self):
-        return self.line
-        
 class Comment:
     def __init__(self, comment):
         self.name = comment
@@ -89,10 +82,12 @@ class Comment:
         raise NotImplementedError(langWarning.format(type(self).__name__))
 
 class Constant(Referencable):
-    def __init__(self, name, val):
+    def __init__(self, var, val):
         Referencable.__init__(self)
-        self.name = name
-        self.val  = val
+        self.name = var[0]
+        self.var_type = var[1]
+        self.val  = val[0]
+        self.cast = val[1]
 
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
@@ -105,6 +100,7 @@ class Register(Referencable):
 
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
+
     
 class QuantumRegister(Register):
 
@@ -140,10 +136,14 @@ class Argument(Referencable):
         raise NotImplementedError(langWarning.format(type(self).__name__))
 
 class Let:
-    def __init__(self, var, val):
-        self.var = var
-        self.val = val
-
+    def __init__(self, var, val = None):
+        if type(var) is Constant:
+            self.const = var
+        elif type(var) in [tuple, list]:
+            self.const = Constant(var, val)
+        else:
+            raise TypeError('Bad assignment of let')
+            
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
 
@@ -259,8 +259,8 @@ class CodeBlock:
 
     def let(self, var, val):
         self._is_def(var, create=True)
-        self._objs[var] = Constant(var,val)
-        self._code += [Let(var, val)]
+        self._objs[var] = Constant( var, val )
+        self._code += [Let( self._objs[var] )]
         
     def call_gate(self, funcName, cargs, qargs):
         self._is_def(funcName, create=False, type_ = 'Gate')
@@ -269,13 +269,11 @@ class CodeBlock:
         if funcName in Gate.internalGates:
             gateRef = Gate.internalGates[funcName]
             gate = CallGate(gateRef.internalName, cargs, qargs)
-            preString, outCargs = gateRef.reorder_args(gate._qargs,gate._cargs)
+            preCode, outCargs = gateRef.reorder_args(gate._qargs,gate._cargs)
             gate._qargs = []
             gate._cargs = outCargs
-            if preString:
-                preString = "\n".join(preString)
-                preString = QASMBlock(self.currentFile, self.currentFile.nLine, preString)
-                self.cBlock(preString)
+            if preCode:
+                self._code += preCode
             gate.finalise_loops()
         else:
             gate = CallGate(funcName, cargs, qargs)
@@ -442,7 +440,7 @@ class CodeBlock:
         elif token.name == "let":
             var = match.group('var')
             val = match.group('val')
-            self.let(var, val)
+            self.let( (var, "const int"), (val, None) )
         elif token.name == "exit":
             self.leave()
         elif token.name == "alias":
@@ -527,17 +525,6 @@ class CodeBlock:
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
 
-class CBlock(CodeBlock):
-    def __init__(self, parent, block):
-        CodeBlock.__init__(self, block, parent=parent)
-        self.parse_verbatim(block)
-
-        
-class PyBlock(CodeBlock):
-    def __init__(self, parent, block):
-        CodeBlock.__init__(self, block, parent=parent)
-        self.parse_verbatim(block)
-
 class IfBlock(CodeBlock):
     def __init__(self, parent, cond, block):
         self._cond = cond
@@ -603,7 +590,7 @@ class Opaque(Gate):
 class Loop(CodeBlock):
     def __init__(self, parent, block, var, start, end, step = 1):
         CodeBlock.__init__(self,block, parent=parent)
-        self._objs[var] = Constant(var, var)
+        self._objs[var] = Constant( (var, "int") , (var, None) )
         self.depth = 1
         self.var = var
         self.start = start
@@ -629,3 +616,24 @@ class InitEnv:
 
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
+
+class Verbatim:
+    def __init__(self, line):
+        self.line = str(line)
+
+    def to_lang(self):
+        return self.line
+
+class ExternalLang:
+    pass
+    
+class CBlock(ExternalLang, CodeBlock):
+    def __init__(self, parent, block):
+        CodeBlock.__init__(self, block, parent=parent)
+        self.parse_verbatim(block)
+
+        
+class PyBlock(ExternalLang, CodeBlock):
+    def __init__(self, parent, block):
+        CodeBlock.__init__(self, block, parent=parent)
+        self.parse_verbatim(block)

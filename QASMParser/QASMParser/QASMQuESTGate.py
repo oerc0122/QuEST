@@ -24,7 +24,7 @@ class QuESTLibGate(Gate):
         return qargs
 
     def reorder_args(self, qargs, cargs):
-        preString = []
+        preCode = []
         args = []
         outCargs = []
         for expect in self.argOrder:
@@ -53,11 +53,11 @@ class QuESTLibGate(Gate):
             if arg == "nextQureg" or arg == "nextIndex" or arg == "index":
                 outCargs += [args.pop(0)]
             elif arg[0:6] == "nIndex":
-                indices = args.pop(0)
                 nTemp+=1
-                tempVar = "tmp"+str(nTemp)
-                nIndices     = len(indices)
-                preString += [f"int {tempVar}[{nIndices}] = {{"+",".join(indices)+"};"]
+                tempVar   = "tmp"+str(nTemp)
+                indices = args.pop(0)
+                nIndices  = len(indices)
+                preCode  += [Let( (f'{tempVar}[{nIndices}]', "const int ") , (indices, None) )]
                 outCargs += [f"(int*) {tempVar}",f"{nIndices}"]
             elif arg == "nextCarg":
                 outCargs += [cargs.pop(0)]
@@ -68,7 +68,7 @@ class QuESTLibGate(Gate):
                 nTemp += 1
                 tempVar = "tmp"+str(nTemp)
                 tempArg = [cargs.pop(0), cargs.pop(0)]
-                preString += [f"Complex {tempVar} = {{{','.join(tempArg)}}};"]
+                preCode += [Let(tempVar, tempArg, "Complex")]
                 outCargs += [tempVar]
             elif arg == "complexMatrix2Carg":
                 nTemp += 1
@@ -79,15 +79,14 @@ class QuESTLibGate(Gate):
             elif arg == "not":
                 nTemp += 1
                 tempVar = "not"
-                preString += [
-                    f"ComplexMatrix2 {tempVar};",
-                    f"{tempVar}.r0c0 = (Complex) {{.real=0., .imag=0.}};",
-                    f"{tempVar}.r0c1 = (Complex) {{.real=1., .imag=0.}};",
-                    f"{tempVar}.r1c0 = (Complex) {{.real=1., .imag=0.}};",
-                    f"{tempVar}.r1c1 = (Complex) {{.real=0., .imag=0.}};"
-                ]
+                preCode += [Let( (tempVar, "ComplexMatrix2") , (None, None) ),
+                            Let( (tempVar+".r0c0", None ), (["0.", "0."], "Complex") ),
+                            Let( (tempVar+".r1c0", None ), (["1.", "0."], "Complex") ),
+                            Let( (tempVar+".r0c1", None ), (["1.", "0."], "Complex") ),
+                            Let( (tempVar+".r1c1", None ), (["0.", "0."], "Complex") ),
+                            ]
                 outCargs += [tempVar]
-        return preString, outCargs
+        return preCode, outCargs
 
 QuESTLibGate(name = "x",   cargs = None, qargs = "a", argOrder = ("nextQureg", "nextIndex"), internalName = "pauliX")
 QuESTLibGate(name = "cx",  cargs = None, qargs = "a", argOrder = ("nextQureg", "nextIndex", "nextIndex"), internalName = "controlledNot")

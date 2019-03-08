@@ -28,21 +28,27 @@ class ProgFile(CodeBlock):
         def print_code(self, code, outputFile):
             self.depth += 1
             for line in code:
-                # Verbose -- Print original
-                if verbose and hasattr(line,'original') and type(line) is not Comment:
+                
+                if verbose and hasattr(line,'original') and type(line) is not Comment: # Verbose -- Print original
                     outputFile.write(self.depth*indent + Comment(line.original).to_lang() + "\n")
-                # Handle loops
-                if hasattr(line,"_loops") and line._loops:
+                
+                if hasattr(line,"_loops") and line._loops: # Handle loops
                     writeln(line._loops.to_lang() + lang.blockOpen)
                     print_code(self,line._loops._code,outputFile)
                     writeln(lang.blockClose)
-                # Print children
-                elif hasattr(line,"_code"):
+                    
+                elif issubclass(type(line), ExternalLang): # Handle verbatim language
+                    writeln(line.to_lang())
+                    self.depth -= 1
+                    print_code(self,line._code,outputFile)
+                    self.depth += 1
+
+                elif hasattr(line,"_code"): # Print children
                     writeln(line.to_lang() + lang.blockOpen)
                     print_code(self,line._code,outputFile)
                     writeln(lang.blockClose)
-                # Print self
-                else:
+                   
+                else: # Print self
                     writeln(line.to_lang())
                 
             self.depth -= 1

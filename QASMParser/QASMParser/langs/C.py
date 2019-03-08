@@ -44,7 +44,7 @@ def Reset_to_c(self):
     return f'collapseToOutcome(qreg, {qargRef}, 0);'
     
 def ClassicalRegister_to_c(self):
-    return f'int {self.name}[{self.size}];'
+    return f'int {self.name}[{self.size}];'+"\n"+f'for (int i = 0; i < {self.size}; i++) {self.name}[i] = 0;'
 
 def QuantumRegister_to_c(self):
     return f"Qureg {self.name} = createQureg({self.size}, Env);"
@@ -54,8 +54,20 @@ def Argument_to_c(self):
     else: return f'Qureg {self.name}, int {self.name}_index'
 
 def Let_to_c(self):
-    return f'const int {self.var} = {self.val};'
-    
+    var = self.const
+    assignee = var.name
+    if var.var_type: assignee = f"{var.var_type} {assignee}"
+
+    # Simple declaration
+    if var.val is None: return f"{assignee};"
+
+    if type(var.val) is list: value =  f'{{{",".join(var.val)}}}'
+    else:  value =  f'{var.val}'
+    if var.cast: value = f"({var.cast}) {value}"
+
+    return f"{assignee} = {value};"
+
+
 def CBlock_to_c(self):
     return ""
     
