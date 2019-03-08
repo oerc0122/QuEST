@@ -11,7 +11,6 @@ def set_lang():
     IfBlock.to_lang = IfBlock_to_Python
     Gate.to_lang = CreateGate_to_Python
     Opaque.to_lang = CreateGate_to_Python
-    CBlock.to_lang = PyBlock_to_Python
     PyBlock.to_lang = PyBlock_to_Python
     Loop.to_lang = Loop_to_Python
     NestLoop.to_lang = Loop_to_Python
@@ -55,10 +54,21 @@ def Argument_to_Python(self):
     else: return f'{self.name}, {self.name}_index'
 
 def Let_to_Python(self):
-    return f'{self.var} = {self.val}'
+    var = self.const
+    assignee = var.name
+
+    # Simple declaration
+    if var.val is None and var.var_type is None: return f"{assignee} = None"
+    elif var.val is None and var.var_type: return f'{assignee} = {var.var_type}()' 
+
+    if type(var.val) is list: value = ",".join(var.val)
+    else:  value =  f'{var.val}'
+    if var.cast: value = f"{var.cast}({value})"
+
+    return f"{assignee} = {value}"
     
 def PyBlock_to_Python(self):
-    return "if True"
+    return ""
     
 def CallGate_to_Python(self):
     printArgs = ""
