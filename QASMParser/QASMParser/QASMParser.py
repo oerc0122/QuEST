@@ -37,7 +37,7 @@ class ProgFile(CodeBlock):
                     print_code(self,line._loops._code,outputFile)
                     writeln(lang.blockClose)
                     
-                elif issubclass(type(line), ExternalLang): # Handle verbatim language
+                elif issubclass(type(line), ExternalLang): # Handle verbatim language blocks
                     writeln(line.to_lang())
                     self.depth -= 1
                     print_code(self,line._code,outputFile)
@@ -47,7 +47,12 @@ class ProgFile(CodeBlock):
                     writeln(line.to_lang() + lang.blockOpen)
                     print_code(self,line._code,outputFile)
                     writeln(lang.blockClose)
-                   
+
+                elif issubclass(type(line), Verbatim):
+                    if lang.blockClose and lang.blockClose in line.line: self.depth -= 1
+                    writeln(line.to_lang())
+                    if lang.blockOpen and lang.blockOpen in line.line: self.depth += 1
+                
                 else: # Print self
                     writeln(line.to_lang())
                 
