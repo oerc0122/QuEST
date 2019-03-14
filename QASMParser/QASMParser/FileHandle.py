@@ -95,14 +95,19 @@ class QASMFile:
         else:
             return None
 
-class QASMBlock(QASMFile):
-    def __init__(self, parent, startline, block):
+    def _parent_file(self, parent):
         self.name = parent.name
         self.version = parent.version
         self.QASMType = parent.QASMType
+        self.nLine = parent.nLine
+        
+        
+class QASMBlock(QASMFile):
+    def __init__(self, parent, block, startline = None):
+        self._parent_file(parent)
+        if startline: self.nLine = startline
         self.File = block.splitlines()
         self.orig = block
-        self.nLine = startline
 
     def __len__(self):
         return len(self.File)
@@ -124,11 +129,8 @@ class QASMBlock(QASMFile):
 
 class NullBlock(QASMFile):
     def __init__(self, parent):
-        self.name = parent.name
-        self.version = parent.version
-        self.QASMType = parent.QASMType
+        self._parent_file(parent)
         self.File = [';']
-        self.nLine = parent.nLine
         self.read = False
         
     def __len__(self):

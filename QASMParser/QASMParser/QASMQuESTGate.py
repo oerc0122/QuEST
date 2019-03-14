@@ -1,12 +1,6 @@
 from .QASMParser import *
 from copy import copy
 
-class QuESTArg(Referencable):
-    def __init__(self, name, val, type_):
-        self.name = name
-        self.val = val
-        self.type_ = type_
-
 class QuESTLibGate(Gate):
     def __init__(self, name, cargs, qargs, argOrder, internalName):
         self.type_ = "Gate"

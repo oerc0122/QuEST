@@ -76,6 +76,7 @@ measure b -> loopVar;
 if (ans[0] == 1) { CBLOCK { printf("%i", 128); } };
 
 U(0,0,lambda) a;
+if (ans[0] == 1) U(1,1,B) a;
 
 reset a;
 reset b[2];
@@ -89,3 +90,4 @@ for Q in [1:3] do {
 }
 
 output ans;
+

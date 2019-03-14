@@ -100,7 +100,6 @@ class Register(Referencable):
 
     def to_lang(self):
         raise NotImplementedError(langWarning.format(type(self).__name__))
-
     
 class QuantumRegister(Register):
 
@@ -416,7 +415,7 @@ class CodeBlock:
         elif token.name == "ifLine":
             cond = match.group('cond')
             if match.group('op'):
-                block = match.group('op')+";\n"
+                block = QASMBlock(self.currentFile, match.group('op'))
             else:
                 block = self.parse_block("if")
             self.new_if(cond, block)
@@ -486,7 +485,7 @@ class CodeBlock:
             block += line + ";\n"
         else:
             self._error(eofWarning.format(f'parsing block {blockName}'))
-        return QASMBlock(self.currentFile, startline, block)
+        return QASMBlock(self.currentFile, block, startline)
 
     def parse_verbatim(self, block):
         indent = "  "
