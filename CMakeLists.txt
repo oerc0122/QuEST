@@ -22,12 +22,16 @@ endif()
 # ----- USER EXECUTABLE -------------------------------------------------------
 # -----------------------------------------------------------------------------
 
+set(USER_SOURCE  "tutorial_example.c"  CACHE STRING "Source to build with QuEST library")
+set(OUTPUT_EXE   "demo"  CACHE STRING "Executable to compile to")
+
+message(STATUS "Compiling ${USER_SOURCE} to executable ${OUTPUT_EXE}")
+
 # Create user executable
-add_executable(demo tutorial_example.c)
+add_executable(${OUTPUT_EXE} ${USER_SOURCE})
 
 # Link libraries to user executable, including QuEST library
-target_link_libraries(demo QuEST m)
-
+target_link_libraries(${OUTPUT_EXE} QuEST m)
 
 # -----------------------------------------------------------------------------
 # ----- TESTS -----------------------------------------------------------------
