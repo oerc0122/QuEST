@@ -1,0 +1,6 @@
+[submodule "Utilities/QuESTPy"]
+	path = Utilities/QuESTPy
+	url = git@github.com:oerc0122/QuESTPy.git
+[submodule "Utilities/QuESTTest"]
+	path = Utilities/QuESTTest
+	url = git@github.com:oerc0122/QuESTTest.git
