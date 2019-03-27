@@ -45,11 +45,20 @@ add_executable(${OUTPUT_EXE} ${USER_SOURCE})
 target_link_libraries(${OUTPUT_EXE} QuEST m)
 
 # -----------------------------------------------------------------------------
+# ----- QuEST UTILITIES -------------------------------------------------------
+# -----------------------------------------------------------------------------
+
+set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake")
+
+include(Utils)
+
+# -----------------------------------------------------------------------------
 # ----- TESTS -----------------------------------------------------------------
 # -----------------------------------------------------------------------------
 
 if (${TESTING})
   set(Python_ADDITIONAL_VERSIONS 3.4;3.5;3.6;3.7;3.8)
+    
   find_package(PythonInterp)
   if ((NOT PYTHONINTERP_FOUND) OR (PYTHON_VERSION_MAJOR LESS 3)  OR (PYTHON_VERSION_MINOR LESS 4))
     set(TESTING OFF CACHE BOOL  "Enable test suite functionality -- requires test suite available" FORCE)
@@ -61,6 +70,7 @@ message(STATUS "Testing is ${TESTING}")
 
 if (${TESTING})
   enable_testing()
+#  set_target_properties(test PROPERTIES DEPENDS QuESTTest)
   add_subdirectory(${QuEST_TEST_DIR})
 endif()
 
@@ -68,9 +78,4 @@ endif()
 # ----- QuEST Python Interface ------------------------------------------------
 # -----------------------------------------------------------------------------
 
-if (${UPDATE_QUEST_LIB_LOC})
-  set(QUESTPY_LOC "${PROJECT_SOURCE_DIR}/${QuEST_TEST_DIR}/QuESTPy/QuESTLibDir.py")
-  message(STATUS "Updating default QuEST Python library (${QUESTPY_LOC}) to ${QuEST_LIB_EXACT}")
-  set(UPDATE_QUEST_LIB_LOC OFF CACHE BOOL "Set default QuESTPy library location to this compilation" FORCE)
-  configure_file(${PROJECT_SOURCE_DIR}/cmake/QuESTPy.in ${QUESTPY_LOC})
-endif()
+

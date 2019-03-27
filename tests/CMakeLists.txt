@@ -20,26 +20,38 @@ if (GENERATE_BENCHMARK)
   message(STATUS "Generating benchmarking test results")
   message(STATUS "${TEST_NQUBITS} Qubits, ${TEST_TYPES}, ${TEST_QUREG}, ${TEST_GENERATE}")
   set(GENERATE_BENCHMARK OFF CACHE BOOL "Generate set of unit tests for this build" FORCE)
+  set(BENCHMARKS_EXIST ON CACHE BOOL "Add custom tests to test search dir") 
   execute_process(
     COMMAND mkdir -p ${TEST_DIR}
-    COMMAND ${PYTHON_EXECUTABLE} ${TESTCOMMAND} -Q ${QuEST_LIB_PATH} -p ${TEST_DIR} -q -n ${TEST_NQUBITS} -T ${TEST_TYPES} -V ${TEST_QUREG} -g ${TEST_GENERATE}
+    COMMAND ${PYTHON_EXECUTABLE} ${TESTCOMMAND} -Q ${QuEST_LIB_PATH} ${INCLUDE_TESTS} -q -n ${TEST_NQUBITS} -T ${TEST_TYPES} -V ${TEST_QUREG} -g ${TEST_GENERATE}
     )
   message(STATUS "Generating benchmarking test results -- DONE") 
 endif()
   
 if(${ENABLE_ADVANCED_TEST})
 
+  # Get list of test sets
   execute_process(
+    DEPENDS QuESTTest
     COMMAND ${TESTCOMMAND} -L
     OUTPUT_VARIABLE AVAILABLE_TESTS
     )
+  # Make semi-colon separated list as required by Cmake
   string(REPLACE "\n" "\;" AVAILABLE_TESTS "${AVAILABLE_TESTS}")
+  # Cast string into list
   set(AVAILABLE_TESTS ${AVAILABLE_TESTS})
-  
+
+  # Add all tests into available test list
   foreach(TEST ${AVAILABLE_TESTS})
-    add_test(${TEST}
-      ${PYTHON_EXECUTABLE} ${TESTCOMMAND} -Q ${QuEST_LIB_PATH} ${TEST}) # -p ${TEST_DIR}
-    set_tests_properties(${TEST} PROPERTIES  PASS_REGULAR_EXPRESSION " 0 failed" FAIL_REGULAR_EXPRESSION "Error")
+    add_test(
+      NAME ${TEST}
+      CONFIGURATIONS debug
+      COMMAND ${PYTHON_EXECUTABLE} ${TESTCOMMAND} $<BENCHMARKS_EXIST:-p ${TEST_DIR}> -Q ${QuEST_LIB_PATH} ${TEST}
+      )
+    set_tests_properties(${TEST}
+      PROPERTIES
+      PASS_REGULAR_EXPRESSION " 0 failed"
+      FAIL_REGULAR_EXPRESSION "Error")
     add_custom_target("test_${TEST}"
       DEPENDS QuEST
       COMMAND ctest -R ${TEST}
@@ -47,9 +59,14 @@ if(${ENABLE_ADVANCED_TEST})
   endforeach(TEST)
 
 else()
-    add_test(all
-      ${PYTHON_EXECUTABLE} ${TESTCOMMAND} -p ${TEST_DIR} -Q ${QuEST_LIB_PATH} unit) #
-    set_tests_properties(all PROPERTIES  PASS_REGULAR_EXPRESSION " 0 failed" FAIL_REGULAR_EXPRESSION "Error") 
+
+  # Add unit test into tests (Core)
+  add_test(unit
+    ${PYTHON_EXECUTABLE} ${TESTCOMMAND} $<BENCHMARKS_EXIST:-p ${TEST_DIR}> -Q ${QuEST_LIB_PATH} unit)
+  set_tests_properties(unit
+    PROPERTIES
+    PASS_REGULAR_EXPRESSION " 0 failed"
+    FAIL_REGULAR_EXPRESSION "[eE]rror") 
 endif()
   
 
