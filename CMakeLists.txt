@@ -11,6 +11,8 @@ message(${PROJECT_BINARY_DIR})
 set(USER_SOURCE  "tutorial_example.c"  CACHE STRING "Source to build with QuEST library")
 set(OUTPUT_EXE   "demo"  CACHE STRING "Executable to compile to")
 
+option(LOCAL_UTILS "Make a local copy of utilities" OFF)
+
 option(TESTING "Enable test suite functionality -- requires test suite available" ON)
 set(QuEST_TEST_DIR "tests" CACHE STRING
   "Name of the directory containing the QuEST library tests. It must be located in the same directory as the root CMakeLists.txt")
@@ -57,9 +59,7 @@ include(Utils)
 # -----------------------------------------------------------------------------
 
 if (${TESTING})
-  set(Python_ADDITIONAL_VERSIONS 3.4;3.5;3.6;3.7;3.8)
     
-  find_package(PythonInterp)
   if ((NOT PYTHONINTERP_FOUND) OR (PYTHON_VERSION_MAJOR LESS 3)  OR (PYTHON_VERSION_MINOR LESS 4))
     set(TESTING OFF CACHE BOOL  "Enable test suite functionality -- requires test suite available" FORCE)
     message(WARNING "Python 3 not found on system -- Disabling testing")
@@ -70,7 +70,6 @@ message(STATUS "Testing is ${TESTING}")
 
 if (${TESTING})
   enable_testing()
-#  set_target_properties(test PROPERTIES DEPENDS QuESTTest)
   add_subdirectory(${QuEST_TEST_DIR})
 endif()
 

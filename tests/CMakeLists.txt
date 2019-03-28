@@ -1,6 +1,5 @@
 # Calculate possible tests
 
-option(GENERATE_BENCHMARK "Generate set of unit tests for this build" OFF)
 option(ENABLE_ADVANCED_TEST "Enable specific unit testing for advanced users" OFF)
 set(TEST_NQUBITS 4 CACHE STRING "Number of qubits to run when running tests")
 set(TEST_TYPES "PMS" CACHE STRING "Type of tests to generate")
@@ -8,32 +7,32 @@ set(TEST_QUREG "ZPDN" CACHE STRING "Types of qureg to generate in tests")
 set(TEST_GENERATE "unit" CACHE STRING "Tests to generate on generate benchmarks")
 
 set(TEST_DIR "${QuEST_Project_BINARY_DIR}/CustomTests" CACHE PATH "Testing files output directory")
-set(TESTCOMMAND "${CMAKE_CURRENT_SOURCE_DIR}/QuESTTest.py")
-
+set(TESTCOMMAND ${PYTHON_EXECUTABLE} -m QuESTTest)
 
 add_custom_target("benchmark"
+  DEPENDS QuESTTest
   DEPENDS QuEST
-  COMMAND ${CMAKE_COMMAND} -P  ${QuEST_Project_SOURCE_DIR} -DGENERATE_BENCHMARK=ON
+  COMMAND mkdir -p ${TEST_DIR}
+  COMMAND ${TESTCOMMAND} -Q ${QuEST_LIB_PATH} ${INCLUDE_TESTS} -q -n ${TEST_NQUBITS} -T ${TEST_TYPES} -V ${TEST_QUREG} -p ${TEST_DIR} -g ${TEST_GENERATE}
+  COMMAND ${CMAKE_COMMAND} -DBENCHMARKS_EXIST=ON ${QuEST_Project_SOURCE_DIR}
+  WORKING_DIRECTORY ${UTIL_ROOT}
   )
 
-if (GENERATE_BENCHMARK)
-  message(STATUS "Generating benchmarking test results")
-  message(STATUS "${TEST_NQUBITS} Qubits, ${TEST_TYPES}, ${TEST_QUREG}, ${TEST_GENERATE}")
-  set(GENERATE_BENCHMARK OFF CACHE BOOL "Generate set of unit tests for this build" FORCE)
-  set(BENCHMARKS_EXIST ON CACHE BOOL "Add custom tests to test search dir") 
-  execute_process(
-    COMMAND mkdir -p ${TEST_DIR}
-    COMMAND ${PYTHON_EXECUTABLE} ${TESTCOMMAND} -Q ${QuEST_LIB_PATH} ${INCLUDE_TESTS} -q -n ${TEST_NQUBITS} -T ${TEST_TYPES} -V ${TEST_QUREG} -g ${TEST_GENERATE}
-    )
-  message(STATUS "Generating benchmarking test results -- DONE") 
+if (${BENCHMARKS_EXIST})
+  set (INC_CUST "-p ${TEST_DIR}")
+else()
+  set (INC_CUST "")
 endif()
-  
-if(${ENABLE_ADVANCED_TEST})
 
+add_test(NAME build
+  COMMAND ${CMAKE_MAKE_PROGRAM} "QuESTTest"
+  WORKING_DIRECTORY ${QuEST_Project_BINARY_DIR}
+  )
+
+if(${ENABLE_ADVANCED_TEST})
   # Get list of test sets
   execute_process(
-    DEPENDS QuESTTest
-    COMMAND ${TESTCOMMAND} -L
+    COMMAND ${TESTCOMMAND} -Q ${QuEST_LIB_PATH} -L
     OUTPUT_VARIABLE AVAILABLE_TESTS
     )
   # Make semi-colon separated list as required by Cmake
@@ -46,10 +45,11 @@ if(${ENABLE_ADVANCED_TEST})
     add_test(
       NAME ${TEST}
       CONFIGURATIONS debug
-      COMMAND ${PYTHON_EXECUTABLE} ${TESTCOMMAND} $<BENCHMARKS_EXIST:-p ${TEST_DIR}> -Q ${QuEST_LIB_PATH} ${TEST}
+      COMMAND ${TESTCOMMAND} ${INC_CUST} -Q ${QuEST_LIB_PATH} ${TEST}
       )
     set_tests_properties(${TEST}
       PROPERTIES
+      DEPANDS build
       PASS_REGULAR_EXPRESSION " 0 failed"
       FAIL_REGULAR_EXPRESSION "Error")
     add_custom_target("test_${TEST}"
@@ -59,15 +59,16 @@ if(${ENABLE_ADVANCED_TEST})
   endforeach(TEST)
 
 else()
-
+  
   # Add unit test into tests (Core)
   add_test(unit
-    ${PYTHON_EXECUTABLE} ${TESTCOMMAND} $<BENCHMARKS_EXIST:-p ${TEST_DIR}> -Q ${QuEST_LIB_PATH} unit)
+    ${TESTCOMMAND} ${INC_CUST} -Q ${QuEST_LIB_PATH} unit)
   set_tests_properties(unit
     PROPERTIES
+    DEPANDS build
     PASS_REGULAR_EXPRESSION " 0 failed"
     FAIL_REGULAR_EXPRESSION "[eE]rror") 
 endif()
-  
+
 
 
