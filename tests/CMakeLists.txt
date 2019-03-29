@@ -29,6 +29,25 @@ add_test(NAME build
   WORKING_DIRECTORY ${QuEST_Project_BINARY_DIR}
   )
 
+macro(Testee name)
+  add_test(
+    NAME ${name}
+    CONFIGURATIONS debug
+    COMMAND ${TESTCOMMAND} ${INC_CUST} -Q ${QuEST_LIB_PATH} ${name}
+    WORKING_DIRECTORY ${UTIL_ROOT}
+    )
+  set_tests_properties(${name}
+    PROPERTIES
+    DEPANDS build
+    PASS_REGULAR_EXPRESSION " 0 failed"
+    FAIL_REGULAR_EXPRESSION "Error")
+  add_custom_target("test_${name}"
+    DEPENDS QuESTTest
+    DEPENDS QuEST
+    COMMAND ctest -R ${name}
+    )
+endmacro(Testee)
+
 if(${ENABLE_ADVANCED_TEST})
   # Get list of test sets
   execute_process(
@@ -42,33 +61,11 @@ if(${ENABLE_ADVANCED_TEST})
 
   # Add all tests into available test list
   foreach(TEST ${AVAILABLE_TESTS})
-    add_test(
-      NAME ${TEST}
-      CONFIGURATIONS debug
-      COMMAND ${TESTCOMMAND} ${INC_CUST} -Q ${QuEST_LIB_PATH} ${TEST}
-      )
-    set_tests_properties(${TEST}
-      PROPERTIES
-      DEPANDS build
-      PASS_REGULAR_EXPRESSION " 0 failed"
-      FAIL_REGULAR_EXPRESSION "Error")
-    add_custom_target("test_${TEST}"
-      DEPENDS QuEST
-      COMMAND ctest -R ${TEST}
-      )
+    Testee(${TEST})
   endforeach(TEST)
 
 else()
   
   # Add unit test into tests (Core)
-  add_test(unit
-    ${TESTCOMMAND} ${INC_CUST} -Q ${QuEST_LIB_PATH} unit)
-  set_tests_properties(unit
-    PROPERTIES
-    DEPANDS build
-    PASS_REGULAR_EXPRESSION " 0 failed"
-    FAIL_REGULAR_EXPRESSION "[eE]rror") 
+  Testee(unit)
 endif()
-
-
-

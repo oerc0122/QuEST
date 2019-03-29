@@ -40,21 +40,28 @@ macro(PythonMod utilName GitRepo)
 endmacro()
 
 PythonMod (QuESTPy git@github.com:oerc0122/QuESTPy.git)
-if (QuESTPy)
+if (TARGET QuESTPy)
   add_dependencies(QuESTPy QuEST)
   add_custom_target( update_QuEST_lib_loc
-    DEPENDS QuESTPy
     DEPENDS QuEST
+    DEPENDS QuESTPy
     COMMAND ${CMAKE_COMMAND} -DQuEST_ROOT=${PROJECT_SOURCE_DIR} -DQuESTPy_PATH=${QuESTPy_PATH} -DQuEST_LIB_EXACT=${QuEST_LIB_EXACT} -DQuEST_LIB_PATH=${QuEST_LIB_PATH} -P ${PROJECT_SOURCE_DIR}/cmake/QuESTPyLib.cmake
     )
+  execute_process(
+    DEPENDS QuEST
+    DEPENDS QuESTPy
+    DEPENDS update_QuEST_lib_loc
+    COMMAND echo PYTHONPATH=${UTIL_ROOT} ${PYTHON_EXECUTABLE} -i -c "import QuESTPy" > interactive
+    )
+  
 endif()
 
 PythonMod (QuESTTest git@github.com:oerc0122/QuESTTest.git)
-if (QuESTTest)
+if (TARGET QuESTTest)
   add_dependencies(QuESTTest QuEST QuESTPy)
 endif()
 
 PythonMod (pyquest-cffi https://github.com/HQSquantumsimulations/pyquest.git)
-if (pyquest-cffi)
+if (TARGET pyquest-cffi)
   add_dependencies(pyquest-cffi QuEST)
 endif()
